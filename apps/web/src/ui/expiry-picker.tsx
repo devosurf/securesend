@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { cn } from "../lib/utils";
+import type { Density } from "./density";
 import { Icon } from "./icon";
 import { Menu, type MenuOption } from "./menu";
 
@@ -41,6 +42,15 @@ function spoken(value: string) {
   );
 }
 
+/* min-w is the natural width at "24 hours", the longest of the three, so the
+ * control never changes size and never moves the affordance beside it. */
+const TRIGGER: Record<Density, string> = {
+  default: "min-w-[134px] px-2.5 py-1.5 text-[11.5px]",
+  responsive:
+    "min-w-[146px] px-3 py-[13px] text-[12px] md:min-w-[134px] md:px-2.5 md:py-1.5 md:text-[11.5px]",
+  touch: "min-w-[146px] px-3 py-[13px] text-[12px]",
+};
+
 export function ExpiryPicker({
   value,
   onChange,
@@ -48,11 +58,10 @@ export function ExpiryPicker({
 }: {
   value: string;
   onChange: (value: string) => void;
-  density?: "default" | "touch";
+  density?: Density;
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const touch = density === "touch";
 
   return (
     <div className="relative">
@@ -60,16 +69,12 @@ export function ExpiryPicker({
         aria-expanded={open}
         aria-haspopup="menu"
         className={cn(
-          /* min-w is the natural width at "24 hours", the longest of the three, so
-           * the control never changes size and never moves the affordance beside
-           * it. The reserve is trailing space and the chevron stays against the
+          /* The reserve above is trailing space and the chevron stays against the
            * text: a chevron parked at a far right edge reads as a gap, and it is
            * the phrase it belongs to, not the box. Only "1 hour" leaves any slack,
            * and it leaves it after the chevron where nothing is looking. */
           "flex items-center gap-1.5 rounded-control font-medium font-sans text-ink-muted transition-colors duration-[var(--duration-instant)] hover:bg-surface-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70",
-          touch
-            ? "min-w-[146px] px-3 py-[13px] text-[12px]"
-            : "min-w-[134px] px-2.5 py-1.5 text-[11.5px]"
+          TRIGGER[density]
         )}
         onClick={() => setOpen((was) => !was)}
         ref={triggerRef}

@@ -23,6 +23,11 @@ import { cn } from "../lib/utils";
  * itself collapses horizontally; a row that is added opens vertically. Same
  * duration, same idea, so a click that does both at once reads as one event.
  *
+ * `responsive` is the same affordance in a strip that is a column on a phone and a
+ * row at a desk. The direction has to follow the strip, because a slot that closes
+ * sideways inside a column keeps its height and leaves an empty line behind, and
+ * one that closes upward inside a row keeps its width and leaves a gap.
+ *
  * Children stay mounted through the exit so the fade has something to fade, and
  * go `invisible` once the slot is shut, which takes them out of the tab order.
  * The caller unmounts on its own clock: SETTLE_MS.
@@ -30,6 +35,25 @@ import { cn } from "../lib/utils";
 
 /** `--duration-settle` in milliseconds, for callers timing an unmount. */
 export const SETTLE_MS = 260;
+
+export type CollapseAxis = "block" | "inline" | "responsive";
+
+/* Which track the slot animates, and what the other one is set to so it cannot
+ * collapse as well. */
+const TRACK: Record<CollapseAxis, { open: string; shut: string }> = {
+  block: { open: "grid-rows-[1fr]", shut: "grid-rows-[0fr]" },
+  inline: { open: "grid-cols-[1fr]", shut: "grid-cols-[0fr]" },
+  responsive: {
+    open: "grid-cols-none grid-rows-[1fr] md:grid-cols-[1fr] md:grid-rows-none",
+    shut: "grid-cols-none grid-rows-[0fr] md:grid-cols-[0fr] md:grid-rows-none",
+  },
+};
+
+const TRANSITION: Record<CollapseAxis, string> = {
+  block: "transition-[grid-template-rows]",
+  inline: "transition-[grid-template-columns]",
+  responsive: "transition-[grid-template-rows,grid-template-columns]",
+};
 
 export function Collapse({
   open,
@@ -40,7 +64,7 @@ export function Collapse({
 }: {
   open: boolean;
   /** block opens downward (a row), inline closes sideways (a spent affordance). */
-  axis?: "block" | "inline";
+  axis?: CollapseAxis;
   /** False for something that was already there when the screen loaded: it has
    * no arrival to explain, so it must not play one. */
   enter?: boolean;
@@ -76,20 +100,16 @@ export function Collapse({
   }, [open]);
 
   const shown = entered && open;
-  const block = axis === "block";
 
   return (
     <div
       className={cn(
         "grid duration-[var(--duration-settle)] motion-reduce:transition-none",
-        block
-          ? "transition-[grid-template-rows]"
-          : "transition-[grid-template-columns]",
+        TRANSITION[axis],
         shown
           ? "ease-[var(--ease-out-quick)]"
           : "ease-[var(--ease-in-out-soft)]",
-        block && (shown ? "grid-rows-[1fr]" : "grid-rows-[0fr]"),
-        !block && (shown ? "grid-cols-[1fr]" : "grid-cols-[0fr]"),
+        shown ? TRACK[axis].open : TRACK[axis].shut,
         className
       )}
     >

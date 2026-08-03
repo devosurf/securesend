@@ -1,7 +1,8 @@
 import type { ReactNode, Ref } from "react";
 import { cn } from "../lib/utils";
 import { Button } from "./button";
-import { Collapse } from "./collapse";
+import { Collapse, type CollapseAxis } from "./collapse";
+import type { Density } from "./density";
 import { Icon } from "./icon";
 
 /*
@@ -51,6 +52,29 @@ import { Icon } from "./icon";
  * this slot once had is gone, because a strip that can render a label nothing can
  * change is a strip that can lie about being a setting.
  */
+
+/* The stacking is the width fact above, so at `responsive` it is a media query
+ * rather than a decision: this strip is in the homepage's first paint, which is
+ * rendered to HTML at build time, before there is a screen to measure. */
+const SETTINGS: Record<Density, string> = {
+  default: "items-center",
+  responsive:
+    "-mx-1 -my-2 min-w-0 flex-col items-start md:mx-0 md:my-0 md:flex-row md:items-center",
+  touch: "-mx-1 -my-2 min-w-0 flex-col items-start",
+};
+
+/* The affordance grows by padding only, so a thumb-sized target and a cursor-sized
+ * one read at the same weight. `tap` is the cva size below the desk width, and this
+ * is the desk half undoing it. */
+const AT_DESK = "md:px-3 md:py-1.5 md:text-[11.5px]";
+
+/** Which way the spent affordance goes, which is the way the strip runs. */
+const SPEND: Record<Density, CollapseAxis> = {
+  default: "inline",
+  responsive: "responsive",
+  touch: "block",
+};
+
 export function OptionsRow({
   expiry,
   passwordSet = false,
@@ -72,11 +96,9 @@ export function OptionsRow({
   addPasswordRef?: Ref<HTMLButtonElement> | undefined;
   action?: ReactNode;
   quiet?: boolean;
-  density?: "default" | "touch";
+  density?: Density;
   className?: string;
 }) {
-  const touch = density === "touch";
-
   return (
     <div
       className={cn(
@@ -88,18 +110,23 @@ export function OptionsRow({
         className={cn(
           "flex gap-1 transition-opacity duration-[var(--duration-quick)] motion-reduce:transition-none",
           quiet && "pointer-events-none opacity-40",
-          touch ? "-mx-1 -my-2 min-w-0 flex-col items-start" : "items-center"
+          SETTINGS[density]
         )}
       >
         {expiry}
         {/* enter={false}: on a screen that loads with no password set, the button
-         * was always there and has no arrival to explain. */}
-        <Collapse axis="inline" enter={false} open={!passwordSet}>
+         * was always there and has no arrival to explain. The slot spends itself in
+         * whichever direction this strip runs, so a stacked one loses a line rather
+         * than emptying one. */}
+        <Collapse axis={SPEND[density]} enter={false} open={!passwordSet}>
           <Button
-            className="gap-1.5 whitespace-nowrap"
+            className={cn(
+              "gap-1.5 whitespace-nowrap",
+              density === "responsive" && AT_DESK
+            )}
             onClick={onAddPassword}
             ref={addPasswordRef}
-            size={touch ? "tap" : "sm"}
+            size={density === "default" ? "sm" : "tap"}
             variant="ghost"
           >
             <Icon name="lock" size={12} />

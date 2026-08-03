@@ -1,5 +1,6 @@
 import { type KeyboardEvent, type RefObject, useEffect, useRef } from "react";
 import { cn } from "../lib/utils";
+import type { Density } from "./density";
 import { FloatLayer } from "./float-layer";
 import { Icon } from "./icon";
 
@@ -43,6 +44,12 @@ export interface MenuOption {
   value: string;
 }
 
+const ROW: Record<Density, string> = {
+  default: "px-2.5 py-1.5",
+  responsive: "px-3 py-2.5 md:px-2.5 md:py-1.5",
+  touch: "px-3 py-2.5",
+};
+
 const MOVEMENT_KEYS = ["ArrowDown", "ArrowUp", "Home", "End"];
 
 export function Menu({
@@ -76,8 +83,11 @@ export function Menu({
    * space above the strip is the note field at its 132px floor. Three rows at 44
    * plus padding is about 150 and gets its top border shaved off; at 33 it fits
    * with room. So: **three options is the ceiling on a phone.** A fourth needs a
-   * different control, not a tighter row. */
-  density?: "default" | "touch";
+   * different control, not a tighter row.
+   *
+   * `responsive` is touch below the desk width and default at it, for a page that
+   * is one element at both widths rather than two frames. */
+  density?: Density;
   /* So Escape and a pick both put focus back where it came from. The trigger
    * belongs to the caller, so the caller passes it rather than this reaching into
    * the DOM to guess which element opened it. */
@@ -188,7 +198,7 @@ export function Menu({
             aria-checked={current}
             className={cn(
               "flex w-full items-center justify-between gap-4 whitespace-nowrap rounded-inner text-left font-medium font-sans text-[12.5px] transition-colors duration-[var(--duration-instant)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70",
-              density === "touch" ? "px-3 py-2.5" : "px-2.5 py-1.5",
+              ROW[density],
               current
                 ? "text-accent"
                 : "text-ink-muted hover:bg-surface-raised hover:text-ink"
