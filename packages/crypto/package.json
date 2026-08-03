@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./base64url": "./src/base64url.ts"
+    "./base64url": "./src/base64url.ts",
+    "./ids": "./src/ids.ts"
   },
   "scripts": {
     "build": "tsup",
