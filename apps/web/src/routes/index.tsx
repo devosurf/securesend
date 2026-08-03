@@ -13,6 +13,8 @@ import { Collapse } from "../ui/collapse";
 import { Icon } from "../ui/icon";
 import { TextLink } from "../ui/text-link";
 import { Wordmark } from "../ui/wordmark";
+import { DeviceMemory } from "../watch/memory";
+import { WatchProvider } from "../watch/watching";
 
 /*
  * securesend.dev/ is the whole public page, and the whole sender's side.
@@ -20,8 +22,8 @@ import { Wordmark } from "../ui/wordmark";
  * The create page is the homepage. That is the product's single most important
  * structural decision and everything here follows from it: the first thing a
  * stranger sees is the thing they came to use, and the ten seconds they spend on
- * it is the entire product. The sender's device memory, under the envelope, arrives
- * with the reveal work.
+ * it is the entire product. Under the envelope sits what this device remembers
+ * sending, which at rest costs the page one line.
  *
  * ==== three bands on a phone, one document at a desk =======================
  *
@@ -383,6 +385,13 @@ function Fold() {
       </Collapse>
 
       <Envelope />
+
+      {/* Under the envelope, in the same column, because it is about the same job one
+       * step later. It renders nothing at all on a browser that has never sent
+       * anything from here. */}
+      <div className="w-full max-w-[620px]">
+        <DeviceMemory />
+      </div>
     </div>
   );
 
@@ -397,9 +406,13 @@ function Fold() {
 
 function Home() {
   return (
-    <ComposeProvider>
-      <Page />
-    </ComposeProvider>
+    /* Watching wraps composing, because the receipt is inside the composer and it is
+     * the receipt that asks to burn the secret it has just made. */
+    <WatchProvider>
+      <ComposeProvider>
+        <Page />
+      </ComposeProvider>
+    </WatchProvider>
   );
 }
 

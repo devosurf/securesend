@@ -1,7 +1,7 @@
 import { sealEnvelope } from "@securesend/crypto/envelope";
 import type { InferRequestType } from "hono/client";
 import { apiClient, type ClientOptions } from "../api/client";
-import { type Kept, remember } from "./remember";
+import { browserMemory, type Kept, remember } from "./remember";
 
 /*
  * The sender's whole crossing, from what they typed to a link they can paste.
@@ -147,16 +147,6 @@ function limitFrom(said: unknown): number {
   }
 
   return MAX_ENVELOPE_BYTES;
-}
-
-function browserMemory(): Kept | null {
-  try {
-    return window.localStorage;
-  } catch {
-    // Storage can be switched off entirely. A browser that cannot remember must
-    // still be able to send.
-    return null;
-  }
 }
 
 export async function sealAndSend(

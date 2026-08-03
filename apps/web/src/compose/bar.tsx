@@ -2,6 +2,8 @@ import type { MouseEvent } from "react";
 import { Button } from "../ui/button";
 import { Collapse } from "../ui/collapse";
 import { Icon } from "../ui/icon";
+import { watchedNow } from "../watch/statuses";
+import { useWatching } from "../watch/watching";
 import { type Handoff, useComposing } from "./composing";
 
 /*
@@ -46,29 +48,64 @@ export function PhoneBar() {
     affordances,
     canSend,
     handoff,
+    link,
     locking,
     pair,
     send,
     shareLink,
     stage,
   } = useComposing();
+  const { askToBurn, statusOf } = useWatching();
 
   if (stage === "sent") {
-    return (
-      <div className={`${BAND} pt-4 pb-6`}>
-        <p className="font-sans text-ink-muted text-small">
-          {handoff === "idle"
-            ? "Whichever app you pick gets the whole link, key and all."
-            : "Anyone holding that link can open it, so keep it to one person."}
-        </p>
+    const burned = link !== null && statusOf(link.id)?.status === "burned";
 
-        {/* The label is what the press managed to do, which is not always what it
-         * offered: shareLink in composing.tsx has the three answers. */}
-        <Button className="mt-3 w-full gap-2" onClick={shareLink} size="touch">
-          <Icon name={handoff === "idle" ? "share" : "check"} size={16} />
-          {SHARE_LABEL[handoff]}
-        </Button>
-      </div>
+    /*
+     * The share, and the burn under it. A burned link has nothing to share, so the
+     * whole band closes rather than swapping its primary for a different action: a
+     * position that becomes a different button teaches that the position is generic.
+     */
+    return (
+      <Collapse
+        className="relative shrink-0 md:hidden"
+        enter={false}
+        open={!burned}
+      >
+        <div className="border-hairline border-t bg-surface-sunken px-5 pt-4 pb-6">
+          <p className="font-sans text-ink-muted text-small">
+            {handoff === "idle"
+              ? "Whichever app you pick gets the whole link, key and all."
+              : "Anyone holding that link can open it, so keep it to one person."}
+          </p>
+
+          {/* The label is what the press managed to do, which is not always what it
+           * offered: shareLink in composing.tsx has the three answers. */}
+          <Button
+            className="mt-3 w-full gap-2"
+            onClick={shareLink}
+            size="touch"
+          >
+            <Icon name={handoff === "idle" ? "share" : "check"} size={16} />
+            {SHARE_LABEL[handoff]}
+          </Button>
+
+          {/* Under the primary, in the same reach, at a tenth of its weight. Burn
+           * lands 24px from the bottom edge, the single most pressable place on a
+           * phone: weight and width do the separating, and what stands between a
+           * misfire and a destroyed secret is the dialog. */}
+          {link ? (
+            <div className="mt-2.5 flex justify-center">
+              <Button
+                onClick={() => askToBurn(watchedNow(link))}
+                size="tap"
+                variant="ghost"
+              >
+                Burn it now
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </Collapse>
     );
   }
 
