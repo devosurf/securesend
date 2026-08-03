@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useAtDesk } from "../lib/lane";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { Collapse } from "../ui/collapse";
@@ -78,8 +79,8 @@ function Semantic({ icon, children }: { icon: IconName; children: ReactNode }) {
 }
 
 export function Receipt() {
-  const { atDesk, copyLink, copied, expiry, link, seal, sendAnother } =
-    useComposing();
+  const { copyLink, copied, expiry, link, seal, sendAnother } = useComposing();
+  const atDesk = useAtDesk();
   const { askToBurn, statusOf, trouble } = useWatching();
 
   if (!link) {

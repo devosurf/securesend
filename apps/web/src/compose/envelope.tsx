@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { useAtDesk } from "../lib/lane";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { Collapse } from "../ui/collapse";
@@ -22,7 +23,7 @@ import type { SendProblem } from "./seal-and-send";
  * One element serves both widths. The note and the settings strip are in the
  * page's build-time markup, so their two sizes are a media query. Every row the
  * envelope grows appears only after the sender has pressed something, so those
- * take the lane as a prop: see useAtDesk in composing.tsx.
+ * read the lane at runtime: see useAtDesk in lib/lane.ts.
  *
  * The action is here at a desk and absent on a phone, where the thing that sends
  * the secret is pinned in the bar within thumb reach. The strip keeps only the
@@ -74,8 +75,9 @@ function refusalOf(problem: SendProblem, limit: number): string {
  * one the recipient types to get in. A lock, a bare field and a placeholder that
  * names whose password it is do the whole job. */
 function SealRow() {
-  const { atDesk, fields, onBlur, onFocus, removeSeal, seal, setSealPassword } =
+  const { fields, onBlur, onFocus, removeSeal, seal, setSealPassword } =
     useComposing();
+  const atDesk = useAtDesk();
 
   const value = seal === null ? "" : seal.value;
 
@@ -140,11 +142,11 @@ function Refusal() {
 }
 
 export function Envelope() {
+  const atDesk = useAtDesk();
   const {
     addPair,
     addSeal,
     affordances,
-    atDesk,
     canSend,
     expiry,
     fields,

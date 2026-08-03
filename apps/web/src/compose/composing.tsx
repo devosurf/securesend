@@ -91,8 +91,6 @@ export interface Composing {
     pairOnPhone: RefObject<HTMLButtonElement | null>;
     seal: RefObject<HTMLButtonElement | null>;
   };
-  /** See useAtDesk: only for what cannot be on screen before the sender acts. */
-  atDesk: boolean;
   /** True once the sender has typed anything worth sealing. */
   canSend: boolean;
   copied: boolean;
@@ -362,7 +360,6 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
       setSeal({ open: true, value: "" });
     },
     affordances: { pairAtDesk, pairOnPhone, seal: sealAffordance },
-    atDesk,
     canSend,
     copied,
     copyLink,
