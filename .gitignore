@@ -9,6 +9,9 @@ coverage/
 .env.*
 !.env.example
 
+# Your own copy of compose.example.yaml, holding your own passwords.
+compose.yaml
+
 .DS_Store
 *.log
 npm-debug.log*

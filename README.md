@@ -1,5 +1,9 @@
 # SecureSend
 
+**Status: walking skeleton.** The workspace, the container and the health
+endpoint stand up. Composing and revealing secrets is not built yet, so what
+follows describes where this is going.
+
 Paste a secret, get one link, the link opens once. The secret is encrypted in
 your browser before anything leaves it, and the key rides in the link's
 fragment, which browsers never send to a server. Anyone holding the whole link
@@ -7,19 +11,19 @@ can decrypt it, so treat the link as the secret.
 
 No accounts, no analytics, no third-party scripts.
 
-**Status:** walking skeleton. The workspace, the container and the health
-endpoint stand up. Composing and revealing secrets is not built yet.
-
 ## Run it
 
-You need Docker. Change the database password in the compose file first.
+You need Docker.
 
 ```sh
-docker compose -f compose.example.yaml up
+cp compose.example.yaml compose.yaml
+# change the database password in compose.yaml
+docker compose up
 ```
 
 That builds the image, starts Postgres, applies migrations on boot and serves
-the app on http://localhost:3000.
+the app on http://localhost:3000. Your `compose.yaml` is yours: it is ignored by
+git, so the password you put in it stays out of commits.
 
 ## Develop it
 
