@@ -34,6 +34,25 @@ Biome (Ultracite preset), pnpm workspace. TypeScript at maximal strictness.
 Not this project's tools: Next.js, Bun, Prisma, TanStack Start, barrel exports,
 compatibility shims.
 
+## Workspace
+
+pnpm workspace, three packages:
+
+- `apps/web`. Vite + React SPA, TanStack Router file-based routes. The generated
+  `src/routeTree.gen.ts` is committed.
+- `apps/api`. Hono. Owns the Drizzle schema and the migrations. In production it
+  serves the web build from `./public` in the same process.
+- `packages/crypto`. Consumed as TypeScript source inside the workspace, since
+  both consumers bundle it, and built to `dist/` for the day it publishes.
+
+`pnpm dev`, `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build`. Migrations
+are drizzle-kit generated, never hand-written:
+`pnpm --filter @securesend/api db:generate --name=what_it_does`. They apply on
+boot, so there is nothing to run by hand.
+
+Every user-visible change lands with `pnpm changeset`, written as prose about
+what the reader experiences. The three packages share one version.
+
 ## Writing code here
 
 This repo is written to be read. It goes public, and the product's entire claim
