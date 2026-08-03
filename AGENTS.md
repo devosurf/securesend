@@ -43,7 +43,10 @@ pnpm workspace, three packages:
 - `apps/api`. Hono. Owns the Drizzle schema and the migrations. In production it
   serves the web build from `./public` in the same process.
 - `packages/crypto`. Consumed as TypeScript source inside the workspace, since
-  both consumers bundle it, and built to `dist/` for the day it publishes.
+  both consumers bundle it, and built to `dist/` for the day it publishes. Bytes
+  at its API are typed `Uint8Array<ArrayBuffer>`, because Web Crypto refuses a
+  view backed by a SharedArrayBuffer and TypeScript now models that. A plain
+  `Uint8Array` does not typecheck at a `crypto.subtle` call.
 
 `pnpm dev`, `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build`. Migrations
 are drizzle-kit generated, never hand-written:
