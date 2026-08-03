@@ -1,8 +1,7 @@
 # SecureSend
 
-**Status: walking skeleton.** The workspace, the container and the health
-endpoint stand up. Composing and revealing secrets is not built yet, so what
-follows describes where this is going.
+**Status: half built.** You can seal an envelope and get a real link. Opening one
+is not built yet, so what follows describes where this is going.
 
 Paste a secret, get one link, the link opens once. The secret is encrypted in
 your browser before anything leaves it, and the key rides in the link's

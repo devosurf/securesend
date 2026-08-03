@@ -83,7 +83,7 @@ is that a stranger can audit it and believe us.
 
 ## Tests
 
-Three seams, and no component-test layer:
+Four seams, and no component-test layer:
 
 1. **The API boundary**, primary. The Hono app driven fetch-style against a
    real Postgres with migrations applied by the CLI. Real integrations over
@@ -92,13 +92,21 @@ Three seams, and no component-test layer:
    both Node 22 and a browser runtime. `pnpm test` runs them in both. A test
    named `*.node.test.ts` is one that reads the repo itself, so it runs in Node
    only; everything else has to pass in the browser too.
-3. **One thin Playwright smoke** over the built container, covering only what
+3. **The browser's side of the wire.** `apps/web/src/compose` turns plaintext
+   into a request, a link and a line in this device's memory, and it is the only
+   place the zero-knowledge rule can be asserted at all: the api cannot check
+   that a key stayed out of a request, because a fragment never reaches it. So
+   this seam is driven at its own boundary with a fake instance and a fake store
+   on the other side. That is the one exception to real integrations over mocks,
+   it is granted for the rule in Non-negotiable 1 and nothing else, and it is not
+   a licence to test a component.
+4. **One thin Playwright smoke** over the built container, covering only what
    genuinely needs a browser: fragment handling, clipboard, downloads.
 
 A good test exercises external behavior at a public boundary and would survive
 a rewrite of everything behind it.
 
-Beside the three seams there is the **claims audit**, which is not a behaviour
+Beside the four seams there is the **claims audit**, which is not a behaviour
 test but a check that the product's public claims stay true: the banned words are
 absent, the required headers are present, and nothing the pages load comes from
 another origin. Some of it lives in `apps/web/src/third-party.node.test.ts` and
