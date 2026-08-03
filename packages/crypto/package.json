@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./base64url": "./src/base64url.ts",
+    "./compose": "./src/compose.ts",
     "./fragment": "./src/fragment.ts",
     "./ids": "./src/ids.ts"
   },
