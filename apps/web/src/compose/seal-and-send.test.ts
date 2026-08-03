@@ -2,7 +2,9 @@ import { openEnvelope } from "@securesend/crypto/envelope";
 import { decodeFragmentToken } from "@securesend/crypto/fragment";
 import { describe, expect, it } from "vitest";
 import {
+  MAX_ATTACHMENTS,
   MAX_ENVELOPE_BYTES,
+  MAX_TOTAL_BYTES,
   SendFailedError,
   sealAndSend,
 } from "./seal-and-send";
@@ -73,6 +75,14 @@ function around(reply: (attempt: number) => Response) {
   return { server, storage, world: { ...server, origin: ORIGIN, storage } };
 }
 
+/** A file to attach, filled with something recognisable rather than zeroes. */
+function file(name: string, size: number, type = "application/octet-stream") {
+  const bytes = new Uint8Array(new ArrayBuffer(size));
+  bytes.fill(name.charCodeAt(0));
+
+  return { bytes, name, type };
+}
+
 describe("sealAndSend", () => {
   it("hands back a link that carries the key after its hash", async () => {
     const { world } = around((attempt) => created(`id-${attempt}`));
@@ -89,7 +99,7 @@ describe("sealAndSend", () => {
     expect(link.expiresAt).toBe(EXPIRES);
   });
 
-  it("posts the ciphertext and the three things the api asks for", async () => {
+  it("posts the ciphertext and the things the api asks for, and nothing else", async () => {
     const { server, world } = around((attempt) => created(`id-${attempt}`));
 
     await sealAndSend({ expiry: "1h", note: "hunter2" }, world);
@@ -101,6 +111,7 @@ describe("sealAndSend", () => {
     };
 
     expect(Object.keys(body).toSorted()).toStrictEqual([
+      "attachments",
       "envelope",
       "expiry",
       "id",
@@ -325,5 +336,168 @@ describe("sealAndSend", () => {
       files: [],
       note: "  padded\n",
     });
+  });
+});
+
+/*
+ * Files, which are the one part of an envelope with a name on it.
+ *
+ * The name, the size and the type go inside the envelope's own ciphertext and the
+ * bytes go out as separate ciphertexts, so what the instance is handed is a
+ * numbered list of opaque blobs. That is the whole reason this seam is tested:
+ * "the server never sees a filename" is a claim about a request body, and this is
+ * where the request body is made.
+ */
+describe("sealAndSend, with files", () => {
+  it("posts one ciphertext per file, numbered from zero", async () => {
+    const { server, world } = around((attempt) => created(`id-${attempt}`));
+
+    await sealAndSend(
+      {
+        expiry: "24h",
+        files: [file("ca.pem", 128), file("vpn.ovpn", 256)],
+        note: "the profile is attached",
+      },
+      world
+    );
+
+    const body = JSON.parse(await sent(server.asked)) as {
+      attachments: { ciphertext: string; index: number; iv: string }[];
+    };
+
+    expect(body.attachments.map((one) => one.index)).toStrictEqual([0, 1]);
+    for (const one of body.attachments) {
+      expect(Object.keys(one).toSorted()).toStrictEqual([
+        "ciphertext",
+        "index",
+        "iv",
+      ]);
+      expect(one.iv).toHaveLength(IV_CHARS);
+    }
+  });
+
+  /* The claim on the homepage is that the instance never holds a filename. This
+   * is the request that would break it, so this is where it is asserted. */
+  it("never lets a filename reach the request", async () => {
+    const { server, world } = around((attempt) => created(`id-${attempt}`));
+
+    await sealAndSend(
+      {
+        expiry: "24h",
+        files: [
+          file("northwind-vpn-profile.ovpn", 64, "application/x-openvpn"),
+        ],
+        note: "hi",
+      },
+      world
+    );
+
+    const asked = await sent(server.asked);
+    expect(asked).not.toContain("northwind-vpn-profile");
+    expect(asked).not.toContain(".ovpn");
+    expect(asked).not.toContain("application/x-openvpn");
+  });
+
+  it("posts nothing about files when there are none", async () => {
+    const { server, world } = around((attempt) => created(`id-${attempt}`));
+
+    await sealAndSend({ expiry: "24h", files: [], note: "hi" }, world);
+
+    const body = JSON.parse(await sent(server.asked)) as {
+      attachments: unknown[];
+    };
+    expect(body.attachments).toStrictEqual([]);
+  });
+
+  /* The whole crossing with a file in it: what the instance was given plus what
+   * the sender was given open to the same bytes and the same name. */
+  it("seals the bytes, and hands the name only to whoever opens it", async () => {
+    const { server, world } = around((attempt) => created(`id-${attempt}`));
+    const attached = file("recovery-codes.txt", 512, "text/plain");
+
+    const link = await sealAndSend(
+      { expiry: "24h", files: [attached], note: "codes" },
+      world
+    );
+
+    const posted = JSON.parse(await sent(server.asked)) as {
+      attachments: { ciphertext: string; index: number; iv: string }[];
+      envelope: { ciphertext: string; iv: string };
+    };
+    const read = decodeFragmentToken(link.href.split("#")[1] ?? "");
+    if (read.status !== "ok") {
+      throw new Error("the link did not carry a key");
+    }
+
+    const opened = await openEnvelope({
+      stored: {
+        attachments: posted.attachments,
+        envelope: posted.envelope,
+        id: link.id,
+      },
+      token: read.token,
+    });
+
+    expect(opened.files).toStrictEqual([
+      {
+        bytes: attached.bytes,
+        name: "recovery-codes.txt",
+        size: 512,
+        type: "text/plain",
+      },
+    ]);
+  });
+
+  it("counts the files against the cap on the whole secret", async () => {
+    const { server, world } = around(() => created("never"));
+
+    const failure = (await sealAndSend(
+      { expiry: "24h", files: [file("backup.zip", MAX_TOTAL_BYTES + 1)] },
+      world
+    ).catch((error: unknown) => error)) as SendFailedError;
+
+    expect(failure.problem).toBe("files-too-big");
+    expect(failure.limit).toBe(MAX_TOTAL_BYTES);
+    expect(server.asked).toHaveLength(0);
+  });
+
+  /* Two files that each fit and together do not are exactly what a per-file limit
+   * waves through, which is why the mirrored cap is a total like the instance's. */
+  it("adds the files up rather than measuring them one at a time", async () => {
+    const { world } = around(() => created("never"));
+    const half = Math.ceil(MAX_TOTAL_BYTES / 2);
+
+    await expect(
+      sealAndSend(
+        { expiry: "24h", files: [file("a", half), file("b", half)] },
+        world
+      )
+    ).rejects.toThrow(SendFailedError);
+  });
+
+  it("refuses more files than one envelope carries, and asks nothing", async () => {
+    const { server, world } = around(() => created("never"));
+    const many = Array.from({ length: MAX_ATTACHMENTS + 1 }, (_unused, at) =>
+      file(`part-${at}`, 8)
+    );
+
+    const failure = (await sealAndSend(
+      { expiry: "24h", files: many },
+      world
+    ).catch((error: unknown) => error)) as SendFailedError;
+
+    expect(failure.problem).toBe("too-many-files");
+    expect(server.asked).toHaveLength(0);
+  });
+
+  it("sends an envelope that is only a file", async () => {
+    const { world } = around((attempt) => created(`id-${attempt}`));
+
+    const link = await sealAndSend(
+      { expiry: "24h", files: [file("ca.pem", 64)] },
+      world
+    );
+
+    expect(link.href).toContain("#");
   });
 });

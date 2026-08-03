@@ -417,8 +417,17 @@ function Home() {
 }
 
 function Page() {
+  const { dragging } = useComposing();
+
   return (
-    <div className="relative flex h-dvh flex-col overflow-hidden md:block md:h-auto md:overflow-visible">
+    /* The whole page is the drop target, because a sender dragging a file at the
+     * browser is aiming at the window rather than at a rectangle. Where it will
+     * land is said by the panel arming, not by the shape of the region that takes
+     * the event. */
+    <div
+      className="relative flex h-dvh flex-col overflow-hidden md:block md:h-auto md:overflow-visible"
+      {...dragging}
+    >
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 h-dvh [background:var(--wash-accent)] md:h-[900px]"

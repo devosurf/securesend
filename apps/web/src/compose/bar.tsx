@@ -51,6 +51,7 @@ export function PhoneBar() {
     link,
     locking,
     pair,
+    pickFiles,
     send,
     shareLink,
     stage,
@@ -111,8 +112,14 @@ export function PhoneBar() {
 
   return (
     <div className={`${BAND} pt-2.5 pb-6`}>
-      <Collapse enter={false} open={pair === null}>
-        <div className="-mx-3 flex items-center">
+      {/* There is nothing to drag on a phone, so there is no armed state and no
+       * drop prompt. What the desk's drop zone really said is that files are
+       * welcome and this is where they land, and here that is carried by the
+       * attach affordance being permanently in reach. It opens this device's own
+       * picker, which is where the photos are: a screenshot of a config is a file
+       * like any other. */}
+      <div className="-mx-3 flex items-center">
+        <Collapse axis="inline" enter={false} open={pair === null}>
           <Button
             className="gap-1.5 px-3"
             onClick={addPair}
@@ -124,8 +131,19 @@ export function PhoneBar() {
             <Icon name="plus" size={12} />
             Add a username and password
           </Button>
-        </div>
-      </Collapse>
+        </Collapse>
+        <Button
+          className="gap-1.5 px-3"
+          onClick={pickFiles}
+          onMouseDown={keepCaret}
+          ref={affordances.attachOnPhone}
+          size="tap"
+          variant="ghost"
+        >
+          <Icon name="plus" size={12} />
+          Attach a file
+        </Button>
+      </div>
 
       <Button
         busy={locking}

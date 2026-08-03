@@ -1,4 +1,4 @@
-import { sealEnvelope } from "@securesend/crypto/envelope";
+import { type FileToSeal, sealEnvelope } from "@securesend/crypto/envelope";
 import type { InferRequestType } from "hono/client";
 import { apiClient, type ClientOptions } from "../api/client";
 import { browserMemory, type Kept, remember } from "./remember";
@@ -26,14 +26,24 @@ type Post = ReturnType<typeof apiClient>["api"]["secrets"]["$post"];
 export type Expiry = InferRequestType<Post>["json"]["expiry"];
 
 const KIB = 1024;
+const MIB = 1024 * KIB;
 
-/**
- * This browser's mirror of the instance's cap, which is `MAX_ENVELOPE_BYTES` on
- * the server and the same number by default. The instance is the authority; this
- * is here so a sender who pasted a novel is told before anything is encrypted or
- * uploaded rather than after.
+/*
+ * This browser's mirror of the instance's three caps, which are
+ * `MAX_ENVELOPE_BYTES`, `MAX_TOTAL_BYTES` and `MAX_ATTACHMENTS` on the server and
+ * the same numbers by default. The instance is the authority; these are here so a
+ * sender who pasted a novel or dropped a disk image is told before anything is
+ * encrypted or uploaded rather than after.
  */
+
+/** The note, the login and the file list, which is the part a sender types. */
 export const MAX_ENVELOPE_BYTES = 256 * KIB;
+
+/** The whole secret: the part above plus every file's bytes. */
+export const MAX_TOTAL_BYTES = 10 * MIB;
+
+/** How many files one envelope carries. */
+export const MAX_ATTACHMENTS = 10;
 
 /**
  * What the envelope costs beyond the sender's own text: the version, the key
@@ -55,7 +65,24 @@ const SCHEME = /^https?:\/\//;
 
 const utf8 = new TextEncoder();
 
-export type SendProblem = "too-big" | "refused" | "unreachable";
+/**
+ * Why nothing happened, in the shapes a sender can be told about. Three are about
+ * a cap and they are separate because the way out of each is different: trim the
+ * text, take a file off, take several off. One sentence covering all three would
+ * tell a sender who attached a disk image to shorten their note.
+ *
+ * The last one is the composer's rather than this module's: a file can fail to be
+ * read before there is anything to send. It lives here because the screen has one
+ * slot for saying nothing happened, and two vocabularies for that slot would be
+ * two ways of writing the same sentence.
+ */
+export type SendProblem =
+  | "too-big"
+  | "files-too-big"
+  | "too-many-files"
+  | "refused"
+  | "unreachable"
+  | "unreadable-file";
 
 export interface SendFailure extends ErrorOptions {
   /** Bytes: the cap that was hit, whoever refused the envelope for it. */
@@ -82,6 +109,8 @@ export class SendFailedError extends Error {
 export interface Draft {
   credentials?: { password: string; username: string } | undefined;
   expiry: Expiry;
+  /** Bytes already in hand, read when the sender attached them and not since. */
+  files?: readonly FileToSeal[] | undefined;
   note?: string | undefined;
   /** What the recipient must also have. Absent means the link is enough. */
   password?: string | undefined;
@@ -125,6 +154,7 @@ function partsOf(draft: Draft) {
 
   return {
     credentials: pair && pairIsFilled(pair) ? pair : undefined,
+    files: draft.files,
     note: draft.note?.trim() === "" ? undefined : draft.note,
   };
 }
@@ -135,6 +165,14 @@ function textBytes(draft: Draft): number {
   const written = [draft.note, pair?.username, pair?.password].join("");
 
   return SCAFFOLDING_BYTES + utf8.encode(written).length;
+}
+
+/** Everything the instance would have to store, which is what its total caps. */
+function totalBytes(draft: Draft): number {
+  return (draft.files ?? []).reduce(
+    (sum, source) => sum + source.bytes.length,
+    textBytes(draft)
+  );
 }
 
 /** The cap the instance named, or this browser's own when it named none. */
@@ -156,6 +194,12 @@ export async function sealAndSend(
   if (textBytes(draft) > MAX_ENVELOPE_BYTES) {
     throw new SendFailedError("too-big", { limit: MAX_ENVELOPE_BYTES });
   }
+  if ((draft.files?.length ?? 0) > MAX_ATTACHMENTS) {
+    throw new SendFailedError("too-many-files", { limit: MAX_ATTACHMENTS });
+  }
+  if (totalBytes(draft) > MAX_TOTAL_BYTES) {
+    throw new SendFailedError("files-too-big", { limit: MAX_TOTAL_BYTES });
+  }
 
   const origin = around.origin ?? window.location.origin;
   const post = apiClient(around).api.secrets.$post;
@@ -168,7 +212,12 @@ export async function sealAndSend(
     let response: Awaited<ReturnType<Post>>;
     try {
       response = await post({
-        json: { envelope: sealed.stored.envelope, expiry: draft.expiry, id },
+        json: {
+          attachments: sealed.stored.attachments,
+          envelope: sealed.stored.envelope,
+          expiry: draft.expiry,
+          id,
+        },
       });
     } catch (error) {
       // Nothing answered: offline, a hung proxy, a blocked request. The cause is

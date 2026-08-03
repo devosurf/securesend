@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { type ReactNode, useRef } from "react";
 import { useAtDesk } from "../lib/lane";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
@@ -6,9 +6,11 @@ import { Collapse } from "../ui/collapse";
 import { ExpiryPicker } from "../ui/expiry-picker";
 import { SecretArea, TextInput } from "../ui/field";
 import { FieldRow } from "../ui/field-row";
+import { FileRow } from "../ui/file-row";
 import { Icon } from "../ui/icon";
 import { OptionsRow } from "../ui/options-row";
 import { Panel } from "../ui/panel";
+import { SwapRow } from "../ui/swap-row";
 import { spokenSize, useComposing } from "./composing";
 import type { SendProblem } from "./seal-and-send";
 
@@ -19,6 +21,12 @@ import type { SendProblem } from "./seal-and-send";
  * grows upward from the bottom: a password is not part of what the recipient
  * receives, it is what the envelope is locked with. Every arrival and departure is
  * Collapse, so growing never invents a second grammar.
+ *
+ * A file arrives the same way, and dragging one over the page arms the panel: the
+ * edge takes the focus treatment and the note region takes a tint, so armed says
+ * where the file will land as well as that one is coming. The affordance strip
+ * becomes the drop prompt in place, through SwapRow, because a prompt inserted
+ * mid-drag would move the panel under the cursor at the worst possible moment.
  *
  * One element serves both widths. The note and the settings strip are in the
  * page's build-time markup, so their two sizes are a media query. Every row the
@@ -50,17 +58,36 @@ function noteRows(note: string): number {
 }
 
 /*
- * Why nothing was sent, in the three shapes there are to say it.
+ * Why nothing happened, in every shape there is to say it.
  *
  * All of them end the same way, and that is the point: the secret is still in this
- * tab, nothing was shared, and pressing the button again is the whole recovery. So
+ * tab, nothing was shared, and doing the thing again is the whole recovery. So
  * there is no retry control, because the control that failed is still on screen and
- * still says Create link. Nothing is red either. This system has no red, and a
+ * still says what it does. Nothing is red either. This system has no red, and a
  * refused create is not a catastrophe.
+ *
+ * Half of these are about a file rather than about the send, and they share this
+ * one slot because a sender has one place to look for the answer to "why did that
+ * do nothing". What differs is the way out, so each names its own.
  */
 function refusalOf(problem: SendProblem, limit: number): string {
   if (problem === "too-big") {
     return `That is more than ${spokenSize(limit)} of text, which is the most one envelope holds. Trim it and try again.`;
+  }
+
+  /* The two file refusals name the file as the way out, because the sender who
+   * hits them is holding one. Telling somebody who attached a disk image to
+   * shorten their note would be the accurate cap and the useless instruction. */
+  if (problem === "files-too-big") {
+    return `That would take this envelope over ${spokenSize(limit)}, which is the most one holds. Nothing was attached. Take something off, or send the big one on its own.`;
+  }
+
+  if (problem === "too-many-files") {
+    return `One envelope carries ${limit} files. Nothing was attached, so take some off and try again.`;
+  }
+
+  if (problem === "unreadable-file") {
+    return "That file could not be read, so nothing was attached. If it has moved or been deleted, pick it again from where it is now.";
   }
 
   if (problem === "unreachable") {
@@ -141,21 +168,113 @@ function Refusal() {
   );
 }
 
+/* The one region a dropped file actually lands in, tinted while a file is over the
+ * page, so armed says where as well as whether. */
+function DropZone({
+  armed,
+  children,
+}: {
+  armed: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "transition-colors duration-[var(--duration-quick)] motion-reduce:transition-none",
+        armed ? "bg-accent/5" : "bg-transparent"
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/*
+ * The strip that offers the parts an envelope can grow, and the drop prompt it
+ * becomes mid-drag. Desk only: on a phone there is nothing to drag, and both
+ * affordances live in the bar where a thumb can reach them.
+ *
+ * The credential affordance spends itself when it is used, because there is never
+ * a second login. The attach affordance never does, and it keeps a clause that
+ * only the empty envelope needs: once a file is in the box, that the box takes
+ * files has been demonstrated.
+ */
+function Affordances() {
+  const { addPair, affordances, armed, files, pair, pickFiles } =
+    useComposing();
+
+  return (
+    <SwapRow
+      alternate={
+        <div className="flex items-center px-3.5 py-2">
+          <span className="flex items-center gap-1.5 px-3 py-1.5 font-sans font-semibold text-[11.5px] text-accent">
+            <Icon name="paperclip" size={12} />
+            Drop the file to attach it
+          </span>
+        </div>
+      }
+      /* The divider is always in the box and only changes colour, so the first
+       * part added cannot shift the panel by a pixel. */
+      className={cn(
+        "hidden border-t transition-colors duration-[var(--duration-quick)] motion-reduce:transition-none md:grid",
+        pair === null && files.length === 0
+          ? "border-transparent"
+          : "border-hairline"
+      )}
+      primary={
+        <div className="flex items-center gap-1 px-3.5 py-2">
+          <Collapse axis="inline" enter={false} open={pair === null}>
+            <Button
+              className="gap-1.5"
+              onClick={addPair}
+              ref={affordances.pairAtDesk}
+              size="sm"
+              variant="ghost"
+            >
+              <Icon name="plus" size={12} />
+              Add a username and password
+            </Button>
+          </Collapse>
+          <Button
+            className="gap-1.5"
+            onClick={pickFiles}
+            ref={affordances.attachAtDesk}
+            size="sm"
+            variant="ghost"
+          >
+            <Icon name="plus" size={12} />
+            <span className="flex items-center">
+              Attach a file
+              <Collapse axis="inline" enter={false} open={files.length === 0}>
+                <span className="whitespace-nowrap">, or drop one here</span>
+              </Collapse>
+            </span>
+          </Button>
+        </div>
+      }
+      showAlternate={armed}
+    />
+  );
+}
+
 export function Envelope() {
   const atDesk = useAtDesk();
   const {
-    addPair,
     addSeal,
     affordances,
+    armed,
+    attach,
     canSend,
     expiry,
     fields,
+    files,
     focused,
     locking,
     note,
     onBlur,
     onFocus,
     pair,
+    removeFile,
     removePair,
     seal,
     send,
@@ -175,7 +294,7 @@ export function Envelope() {
 
   return (
     <div className="w-full max-w-[620px] md:mt-10">
-      <Panel className="overflow-hidden" focused={focused}>
+      <Panel armed={armed} className="overflow-hidden" focused={focused}>
         {/* Everything the sender owns dims together while the browser encrypts:
          * they are no longer theirs to edit. */}
         <div
@@ -184,15 +303,17 @@ export function Envelope() {
             locking && "pointer-events-none opacity-50"
           )}
         >
-          <SecretArea
-            className="min-h-[132px] px-5 pt-4 pb-3 md:min-h-[158px] md:pt-5 md:pb-2"
-            onBlur={onBlur}
-            onChange={(event) => setNote(event.target.value)}
-            onFocus={onFocus}
-            placeholder="Paste the secret you need to send"
-            rows={noteRows(note)}
-            value={note}
-          />
+          <DropZone armed={armed}>
+            <SecretArea
+              className="min-h-[132px] px-5 pt-4 pb-3 md:min-h-[158px] md:pt-5 md:pb-2"
+              onBlur={onBlur}
+              onChange={(event) => setNote(event.target.value)}
+              onFocus={onFocus}
+              placeholder="Paste the secret you need to send"
+              rows={noteRows(note)}
+              value={note}
+            />
+          </DropZone>
 
           {/* Stacked at 390: a 92px label column leaves a mono input about
            * nineteen characters wide, and the sender's one job on these two lines
@@ -225,23 +346,22 @@ export function Envelope() {
             />
           </Collapse>
 
-          {/* The affordance spends itself when it is used: you cannot add a second
-           * login. On a phone it lives in the bar instead, so the whole strip is
-           * absent there rather than empty. */}
-          <Collapse enter={false} open={pair === null}>
-            <div className="hidden items-center px-3.5 py-2 md:flex">
-              <Button
-                className="gap-1.5"
-                onClick={addPair}
-                ref={affordances.pairAtDesk}
-                size="sm"
-                variant="ghost"
-              >
-                <Icon name="plus" size={12} />
-                Add a username and password
-              </Button>
-            </div>
-          </Collapse>
+          {/* Under the parts the sender typed, in the order they attached them,
+           * which is the order the envelope numbers them in. */}
+          {files.map((file) => (
+            <Collapse key={file.id} open={file.open}>
+              <FileRow
+                className="border-hairline border-t"
+                density={density}
+                layout={layout}
+                meta={spokenSize(file.bytes.length)}
+                name={file.name}
+                onRemove={() => removeFile(file.id)}
+              />
+            </Collapse>
+          ))}
+
+          <Affordances />
 
           <Collapse open={sealOpen}>
             <SealRow />
@@ -295,6 +415,22 @@ export function Envelope() {
       </Collapse>
 
       <Refusal />
+
+      {/* This device's own picker, which on a phone is where photos live too. It is
+       * hidden rather than absent because the control that opens it is in two
+       * places: the strip at a desk, the bar on a phone. Clearing the value is what
+       * lets the same file be picked twice running and still fire a change. */}
+      <input
+        className="hidden"
+        multiple
+        onChange={async (event) => {
+          const chosen = Array.from(event.target.files ?? []);
+          event.target.value = "";
+          await attach(chosen);
+        }}
+        ref={fields.picker}
+        type="file"
+      />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import {
   createContext,
+  type DragEvent,
   type ReactNode,
   type RefObject,
   use,
@@ -12,7 +13,9 @@ import { SETTLE_MS } from "../ui/collapse";
 import {
   type Draft,
   type Expiry,
+  MAX_ATTACHMENTS,
   MAX_ENVELOPE_BYTES,
+  MAX_TOTAL_BYTES,
   pairIsFilled,
   type SecretLink,
   SendFailedError,
@@ -29,8 +32,13 @@ import {
  * everything the page has to say about itself, so a thumb can reach them while
  * reading. Those two are far apart in the document and they are the same session.
  *
- * What is not here: files, the device's history, and burning. Files are their own
- * work, and the history and the burn belong to the sender's watching side.
+ * A dropped file is the third place: the drop target is the whole page, because a
+ * sender dragging a file at the browser is aiming at the window rather than at a
+ * rectangle, and what says where it will land is the panel lighting up. The page
+ * binds the handlers, the panel reads the state, and both are here.
+ *
+ * What is not here: the device's history and burning, which belong to the
+ * sender's watching side.
  */
 
 type Stage = "compose" | "sent";
@@ -46,6 +54,21 @@ interface Pair {
 interface Seal {
   open: boolean;
   value: string;
+}
+
+/**
+ * A file in the envelope, read the moment it was attached rather than at send.
+ *
+ * Reading early is what makes the row honest: the size beside the name is the
+ * size of the bytes this browser is holding, and a file edited on disk between
+ * attaching it and pressing Create link cannot quietly change what gets sealed.
+ */
+interface Attachment {
+  bytes: Uint8Array<ArrayBuffer>;
+  id: number;
+  name: string;
+  open: boolean;
+  type: string;
 }
 
 /** What the phone's share control last managed to do. */
@@ -87,23 +110,39 @@ export interface Composing {
   addSeal: () => void;
   /** Every affordance that can make a part, so a removed part can hand focus back. */
   affordances: {
+    attachAtDesk: RefObject<HTMLButtonElement | null>;
+    attachOnPhone: RefObject<HTMLButtonElement | null>;
     pairAtDesk: RefObject<HTMLButtonElement | null>;
     pairOnPhone: RefObject<HTMLButtonElement | null>;
     seal: RefObject<HTMLButtonElement | null>;
   };
-  /** True once the sender has typed anything worth sealing. */
+  /** A file is over the page, so the panel is saying where it would land. */
+  armed: boolean;
+  /** Reads what was chosen into the envelope, or says why it will take none of it. */
+  attach: (chosen: ArrayLike<File>) => Promise<void>;
+  /** True once the sender has put anything worth sealing in the box. */
   canSend: boolean;
   copied: boolean;
   /** Whether the link is now on the clipboard, which a browser is free to refuse. */
   copyLink: () => Promise<boolean>;
+  /** What the page binds so a file dropped anywhere on it lands in the envelope. */
+  dragging: {
+    onDragEnter: (event: DragEvent<HTMLElement>) => void;
+    onDragLeave: (event: DragEvent<HTMLElement>) => void;
+    onDragOver: (event: DragEvent<HTMLElement>) => void;
+    onDrop: (event: DragEvent<HTMLElement>) => void;
+  };
   expiry: Expiry;
   fields: {
+    /** This device's own picker, which on a phone is where photos live too. */
+    picker: RefObject<HTMLInputElement | null>;
     seal: RefObject<HTMLInputElement | null>;
     username: RefObject<HTMLInputElement | null>;
   };
+  files: Attachment[];
   focused: boolean;
   handoff: Handoff;
-  /** The cap that was hit, in bytes, when that is why nothing was sent. */
+  /** The cap that was hit when that is why nothing was sent: bytes, or a count. */
   limit: number;
   link: SecretLink | null;
   locking: boolean;
@@ -111,7 +150,9 @@ export interface Composing {
   onBlur: () => void;
   onFocus: () => void;
   pair: Pair | null;
+  pickFiles: () => void;
   problem: SendProblem | null;
+  removeFile: (id: number) => void;
   removePair: () => void;
   removeSeal: () => void;
   seal: Seal | null;
@@ -142,10 +183,17 @@ export function spokenExpiry(expiry: Expiry): string {
   return SPOKEN[expiry];
 }
 
-/** "256 KB", for the one sentence that has to name a cap. */
+/**
+ * "256 KB", for a sentence that has to name a cap and for the size beside a
+ * filename. Nothing rounds to zero: a file of a few hundred bytes is a real file,
+ * and a row reading "0 KB" would look like one that failed to attach.
+ */
 export function spokenSize(bytes: number): string {
   const kib = bytes / KIB;
-  return kib >= KIB ? `${(kib / KIB).toFixed(1)} MB` : `${Math.round(kib)} KB`;
+
+  return kib >= KIB
+    ? `${(kib / KIB).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(kib))} KB`;
 }
 
 function isExpiry(value: string): value is Expiry {
@@ -183,6 +231,16 @@ function problemOf(error: unknown): SendProblem {
   return error instanceof SendFailedError ? error.problem : "refused";
 }
 
+/** Whether what is being dragged is a file at all, rather than selected text. */
+function carriesFiles(event: DragEvent<HTMLElement>): boolean {
+  return [...event.dataTransfer.types].includes("Files");
+}
+
+/** What the envelope's files weigh, which is nearly all of what the cap measures. */
+function weightOf(files: readonly Attachment[]): number {
+  return files.reduce((sum, one) => sum + one.bytes.length, 0);
+}
+
 function limitOf(error: unknown): number {
   return error instanceof SendFailedError && error.limit !== undefined
     ? error.limit
@@ -200,6 +258,8 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
   const [note, setTyped] = useState("");
   const [pair, setPair] = useState<Pair | null>(null);
   const [seal, setSeal] = useState<Seal | null>(null);
+  const [files, setFiles] = useState<Attachment[]>([]);
+  const [armed, setArmed] = useState(false);
   const [expiry, setChosen] = useState<Expiry>("24h");
 
   const [link, setLink] = useState<SecretLink | null>(null);
@@ -210,11 +270,19 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
 
   const usernameField = useRef<HTMLInputElement>(null);
   const sealField = useRef<HTMLInputElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
   const sealAffordance = useRef<HTMLButtonElement>(null);
   const pairAtDesk = useRef<HTMLButtonElement>(null);
   const pairOnPhone = useRef<HTMLButtonElement>(null);
+  const attachAtDesk = useRef<HTMLButtonElement>(null);
+  const attachOnPhone = useRef<HTMLButtonElement>(null);
   const blurring = useRef(0);
   const inFlight = useRef<Promise<void> | null>(null);
+  const nextFile = useRef(1);
+  /* Dragging over a child fires leave on the parent, so the page would disarm
+   * every time the cursor crossed a row. Counting enter against leave is what
+   * makes "still over the page" a thing this can know. */
+  const dragDepth = useRef(0);
 
   const hasPair = pair !== null;
   const hadPair = useRef(false);
@@ -249,7 +317,9 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
    * predicate, plus the one thing it cannot answer: a seal row the sender opened
    * and left empty holds the send until they fill it or take it off. */
   const hasSomething =
-    note.trim() !== "" || (pair !== null && pairIsFilled(pair));
+    note.trim() !== "" ||
+    files.length > 0 ||
+    (pair !== null && pairIsFilled(pair));
   const canSend = hasSomething && !(seal !== null && seal.value === "");
 
   function draftOf(): Draft {
@@ -258,6 +328,13 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
         credentials: { password: pair.password, username: pair.username },
       }),
       ...(seal && { password: seal.value }),
+      ...(files.length > 0 && {
+        files: files.map((one) => ({
+          bytes: one.bytes,
+          name: one.name,
+          type: one.type,
+        })),
+      }),
       expiry,
       note,
     };
@@ -304,6 +381,103 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
 
     return inFlight.current;
   }
+
+  /*
+   * Attaching, which is where a file stops being a thing on a disk and becomes
+   * bytes this browser is holding.
+   *
+   * A gesture is taken whole or not at all. Attaching four of five dropped files
+   * and saying nothing about the fifth would be the product quietly deciding which
+   * parts of a handover matter, so a drop that would pass a cap is refused with a
+   * sentence and the envelope is left exactly as it was.
+   *
+   * The weight checked here is the files' own, not the whole secret's. The note
+   * can add a quarter of a megabyte to that and sealAndSend is the authority on
+   * the total, so a sender right on the line is caught there instead, by the same
+   * sentence. This one is the early answer, not the ruling.
+   */
+  async function attach(chosen: ArrayLike<File>) {
+    const picked = [...Array.from(chosen)];
+    if (picked.length === 0) {
+      return;
+    }
+
+    if (files.length + picked.length > MAX_ATTACHMENTS) {
+      setProblem("too-many-files");
+      setLimit(MAX_ATTACHMENTS);
+      return;
+    }
+
+    const weight = picked.reduce((sum, one) => sum + one.size, weightOf(files));
+    if (weight > MAX_TOTAL_BYTES) {
+      setProblem("files-too-big");
+      setLimit(MAX_TOTAL_BYTES);
+      return;
+    }
+
+    let read: Attachment[];
+    try {
+      read = await Promise.all(
+        picked.map(async (one) => {
+          const id = nextFile.current;
+          nextFile.current += 1;
+
+          return {
+            bytes: new Uint8Array(await one.arrayBuffer()),
+            id,
+            name: one.name,
+            open: true,
+            type: one.type,
+          };
+        })
+      );
+    } catch {
+      /* A file moved or deleted between the picker and this read. Nothing about
+       * it is worth carrying into an error: the name is the sender's business and
+       * the browser will not say more than that it could not be read. */
+      setProblem("unreadable-file");
+      return;
+    }
+
+    setProblem(null);
+    setFiles((now) => [...now, ...read]);
+  }
+
+  /*
+   * The whole page is the drop target, because a sender dragging a file at the
+   * browser is aiming at the window rather than at a rectangle. What says where it
+   * will land is the panel lighting up, which is armed, below.
+   */
+  const dragging = {
+    onDragEnter(event: DragEvent<HTMLElement>) {
+      if (carriesFiles(event)) {
+        dragDepth.current += 1;
+        setArmed(true);
+      }
+    },
+    onDragLeave(event: DragEvent<HTMLElement>) {
+      if (!carriesFiles(event)) {
+        return;
+      }
+      dragDepth.current -= 1;
+      if (dragDepth.current <= 0) {
+        dragDepth.current = 0;
+        setArmed(false);
+      }
+    },
+    onDragOver(event: DragEvent<HTMLElement>) {
+      // Without this the browser opens the file instead of handing it over.
+      if (carriesFiles(event)) {
+        event.preventDefault();
+      }
+    },
+    async onDrop(event: DragEvent<HTMLElement>) {
+      event.preventDefault();
+      dragDepth.current = 0;
+      setArmed(false);
+      await attach(event.dataTransfer.files);
+    },
+  };
 
   async function copyLink(): Promise<boolean> {
     if (!link) {
@@ -359,12 +533,22 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     addSeal() {
       setSeal({ open: true, value: "" });
     },
-    affordances: { pairAtDesk, pairOnPhone, seal: sealAffordance },
+    affordances: {
+      attachAtDesk,
+      attachOnPhone,
+      pairAtDesk,
+      pairOnPhone,
+      seal: sealAffordance,
+    },
+    armed,
+    attach,
     canSend,
     copied,
     copyLink,
+    dragging,
     expiry,
-    fields: { seal: sealField, username: usernameField },
+    fields: { picker, seal: sealField, username: usernameField },
+    files,
     focused,
     handoff,
     limit,
@@ -383,7 +567,23 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
       setStarted(true);
     },
     pair,
+    pickFiles() {
+      picker.current?.click();
+    },
     problem,
+    removeFile(id) {
+      edited();
+      setFiles((now) =>
+        now.map((one) => (one.id === id ? { ...one, open: false } : one))
+      );
+      window.setTimeout(() => {
+        setFiles((now) => now.filter((one) => one.id !== id));
+        /* Back to the affordance the row came from. Both lanes are asked, and the
+         * one whose affordance is not on screen cannot take focus. */
+        attachAtDesk.current?.focus({ preventScroll: true });
+        attachOnPhone.current?.focus({ preventScroll: true });
+      }, SETTLE_MS);
+    },
     removePair() {
       setPair((now) => (now ? { ...now, open: false } : now));
       window.setTimeout(() => setPair(null), SETTLE_MS);
@@ -404,6 +604,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
       setTyped("");
       setPair(null);
       setSeal(null);
+      setFiles([]);
     },
     setExpiry(value) {
       if (isExpiry(value)) {
