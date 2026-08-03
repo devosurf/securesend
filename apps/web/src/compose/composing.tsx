@@ -7,8 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { useAtDesk } from "../lib/lane";
 import { SETTLE_MS } from "../ui/collapse";
-import { DESK_WIDTH } from "../ui/density";
 import {
   type Draft,
   type Expiry,
@@ -152,34 +152,6 @@ export function spokenSize(bytes: number): string {
 
 function isExpiry(value: string): value is Expiry {
   return Object.hasOwn(SPOKEN, value);
-}
-
-/**
- * Which lane the sender is in.
- *
- * It is a media query read in an effect, so it is only ever right after the first
- * paint. That is why nothing in the page's build-time markup may depend on it: a
- * control that is on screen before anybody presses anything gets its two sizes
- * from a media query in CSS instead. What this is for is everything that cannot
- * exist until the sender has acted, which is every row the envelope grows and the
- * whole receipt. By the time one of those is on screen this has long since settled.
- *
- * True first, so the build's markup carries the introduction open, which is how
- * both lanes look before anybody types.
- */
-function useAtDesk(): boolean {
-  const [atDesk, setAtDesk] = useState(true);
-
-  useEffect(() => {
-    const query = window.matchMedia(DESK_WIDTH);
-    const settle = () => setAtDesk(query.matches);
-
-    settle();
-    query.addEventListener("change", settle);
-    return () => query.removeEventListener("change", settle);
-  }, []);
-
-  return atDesk;
 }
 
 /** Whatever is left of the floor, so the quiet moment is never a flicker. */
