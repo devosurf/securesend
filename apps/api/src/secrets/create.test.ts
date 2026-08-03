@@ -1,15 +1,12 @@
-import { randomBytes } from "node:crypto";
-import {
-  base64urlToBytes,
-  bytesToBase64url,
-} from "@securesend/crypto/base64url";
+import { base64urlToBytes } from "@securesend/crypto/base64url";
 import { newSecretId } from "@securesend/crypto/ids";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../app";
 import { closeDatabase, db } from "../db/client";
-import { dailyCounters, secrets } from "../db/schema";
+import { secrets } from "../db/schema";
 import { hashManagementToken, MANAGEMENT_TOKEN_LENGTH } from "./management";
+import { bytes, countToday, type Expiry, IV_BYTES } from "./testing";
 
 afterAll(closeDatabase);
 
@@ -19,20 +16,11 @@ const CONFLICT = 409;
 const TOO_LARGE = 413;
 
 const HOUR_MS = 3_600_000;
-const IV_BYTES = 12;
 
-type Expiry = "1h" | "24h" | "72h";
-
-/*
- * A body to post. The ciphertext is random bytes, and that is the point rather
- * than a shortcut: to this route an envelope is opaque, so a test that had to
- * encrypt something first would be testing a claim the route does not make. The
- * id comes from the real generator, because that one the route does check.
- */
-function bytes(length: number): string {
-  return bytesToBase64url(randomBytes(length));
-}
-
+/* A body to post. The ciphertext is random bytes, and that is the point rather than a
+ * shortcut: to this route an envelope is opaque, so a test that had to encrypt something
+ * first would be testing a claim the route does not make. The id comes from the real
+ * generator, because that one the route does check. */
 function draft(expiry: Expiry = "24h") {
   return {
     envelope: { ciphertext: bytes(96), iv: bytes(IV_BYTES) },
@@ -64,15 +52,6 @@ async function stored(id: string) {
 async function isStored(id: string) {
   const [found] = await find(id);
   return found !== undefined;
-}
-
-async function creates(): Promise<number> {
-  const [today] = await db
-    .select({ creates: dailyCounters.creates })
-    .from(dailyCounters)
-    .where(eq(dailyCounters.day, sql`current_date`));
-
-  return today?.creates ?? 0;
 }
 
 describe("POST /api/secrets", () => {
@@ -157,11 +136,11 @@ describe("POST /api/secrets", () => {
   });
 
   it("counts the create in the day's counters", async () => {
-    const before = await creates();
+    const before = await countToday("creates");
 
     await post(draft());
 
-    expect(await creates()).toBe(before + 1);
+    expect(await countToday("creates")).toBe(before + 1);
   });
 });
 
@@ -302,9 +281,9 @@ describe("POST /api/secrets, refused", () => {
     const body = draft();
     await post(body);
 
-    const before = await creates();
+    const before = await countToday("creates");
     await post({ ...draft(), id: body.id });
 
-    expect(await creates()).toBe(before);
+    expect(await countToday("creates")).toBe(before);
   });
 });

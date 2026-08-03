@@ -4,6 +4,7 @@ import { newSecretId } from "@securesend/crypto/ids";
 import { eq, sql } from "drizzle-orm";
 import { app } from "../app";
 import { db } from "../db/client";
+import type { Counted } from "../db/counters";
 import { dailyCounters, secrets } from "../db/schema";
 
 /*
@@ -62,12 +63,8 @@ export async function seal(expiry: Expiry = "24h"): Promise<Sealed> {
   return { envelope, ...answer };
 }
 
-export function findRow(id: string) {
-  return db.select().from(secrets).where(eq(secrets.id, id));
-}
-
 export async function rowOf(id: string) {
-  const [found] = await findRow(id);
+  const [found] = await db.select().from(secrets).where(eq(secrets.id, id));
   if (!found) {
     throw new Error("the envelope this test needs was never stored");
   }
@@ -87,9 +84,7 @@ export async function expire(id: string): Promise<void> {
 }
 
 /** The day's counter for one of the four things worth counting. */
-export async function countToday(
-  name: "creates" | "reveals" | "burns" | "expiries"
-): Promise<number> {
+export async function countToday(name: Counted): Promise<number> {
   const [today] = await db
     .select({ count: dailyCounters[name] })
     .from(dailyCounters)
