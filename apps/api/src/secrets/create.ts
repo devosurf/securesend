@@ -6,7 +6,8 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import { db } from "../db/client";
-import { dailyCounters, secrets } from "../db/schema";
+import { countOne } from "../db/counters";
+import { secrets } from "../db/schema";
 import { env } from "../env";
 import { hashManagementToken, mintManagementToken } from "./management";
 
@@ -144,13 +145,7 @@ export const create = new Hono().post(
         .returning({ expiresAt: secrets.expiresAt, id: secrets.id });
 
       if (inserted.length > 0) {
-        await tx
-          .insert(dailyCounters)
-          .values({ creates: 1, day: sql`current_date` })
-          .onConflictDoUpdate({
-            set: { creates: sql`${dailyCounters.creates} + 1` },
-            target: dailyCounters.day,
-          });
+        await countOne(tx, "creates");
       }
 
       return inserted;

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { bytesToBase64url } from "@securesend/crypto/base64url";
 
 /*
@@ -23,4 +23,18 @@ export function mintManagementToken(): string {
 
 export function hashManagementToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+/**
+ * Whether this token is the one that manages that row. Compared without leaking
+ * how far the two got before they differed: a digest comparison that returns early
+ * is not the weakness people think it is here, since guessing the token still costs
+ * 256 bits, but a constant-time compare is one line and this is the only authority
+ * in the product.
+ */
+export function managesSecret(token: string, hash: string): boolean {
+  const offered = Buffer.from(hashManagementToken(token), "hex");
+  const stored = Buffer.from(hash, "hex");
+
+  return offered.length === stored.length && timingSafeEqual(offered, stored);
 }

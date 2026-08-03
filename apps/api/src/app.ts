@@ -5,7 +5,10 @@ import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import { db } from "./db/client";
 import { securityHeaders } from "./headers";
+import { burn } from "./secrets/burn";
 import { create } from "./secrets/create";
+import { reveal } from "./secrets/reveal";
+import { status } from "./secrets/status";
 
 const WEB_BUILD = "./public";
 const UNAVAILABLE = 503;
@@ -40,7 +43,10 @@ const api = new Hono()
     // serve, not what is wrong with it. The reason goes to the log.
     return c.json({ status: "unavailable" }, UNAVAILABLE);
   })
-  .route("/secrets", create);
+  .route("/secrets", create)
+  .route("/secrets", status)
+  .route("/secrets", reveal)
+  .route("/secrets", burn);
 
 // The bundle is first in the chain, so it rides every response the process can
 // make: the api, the static build, and the 404s.

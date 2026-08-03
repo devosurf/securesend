@@ -13,6 +13,14 @@ if (existsSync(envFile)) {
 export default defineConfig({
   test: {
     environment: "node",
+    /*
+     * One database, and one row of counters for the whole day, which every test
+     * that creates or reveals a secret adds to. Two files running at once would
+     * therefore move each other's counts, so this seam is serial: shared mutable
+     * state is what these tests are driving, and pretending otherwise only makes
+     * them flaky.
+     */
+    fileParallelism: false,
     globalSetup: ["./vitest.global-setup.ts"],
     include: ["src/**/*.test.ts"],
     name: "api",

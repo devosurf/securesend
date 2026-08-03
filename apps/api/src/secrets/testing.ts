@@ -1,0 +1,99 @@
+import { randomBytes } from "node:crypto";
+import { bytesToBase64url } from "@securesend/crypto/base64url";
+import { newSecretId } from "@securesend/crypto/ids";
+import { eq, sql } from "drizzle-orm";
+import { app } from "../app";
+import { db } from "../db/client";
+import { dailyCounters, secrets } from "../db/schema";
+
+/*
+ * One sealed envelope on a real instance, and a way to look at the row under it.
+ *
+ * Only tests import this. It is here rather than in each of them because every
+ * route that acts on a secret has to make one first, and a fixture copied four
+ * ways drifts four ways.
+ *
+ * The ciphertext is random bytes, and that is the point rather than a shortcut: to
+ * these routes an envelope is opaque, so a fixture that encrypted something first
+ * would be asserting a claim the api does not make. It also means a test can
+ * compare what came back against what went in, byte for byte.
+ */
+
+const CREATED = 201;
+
+/** 96 bits, which is the size AES-GCM is defined for. */
+export const IV_BYTES = 12;
+
+export type Expiry = "1h" | "24h" | "72h";
+
+export interface Sealed {
+  envelope: { ciphertext: string; iv: string };
+  expiresAt: string;
+  id: string;
+  managementToken: string;
+}
+
+export function bytes(length: number): string {
+  return bytesToBase64url(randomBytes(length));
+}
+
+/** Creates one envelope through the real route, so nothing here fakes a row. */
+export async function seal(expiry: Expiry = "24h"): Promise<Sealed> {
+  const envelope = { ciphertext: bytes(96), iv: bytes(IV_BYTES) };
+
+  const response = await app.request("/api/secrets", {
+    body: JSON.stringify({ envelope, expiry, id: newSecretId() }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+
+  if (response.status !== CREATED) {
+    throw new Error(
+      `the fixture could not seal an envelope: ${response.status}`
+    );
+  }
+
+  const answer = (await response.json()) as {
+    expiresAt: string;
+    id: string;
+    managementToken: string;
+  };
+
+  return { envelope, ...answer };
+}
+
+export function findRow(id: string) {
+  return db.select().from(secrets).where(eq(secrets.id, id));
+}
+
+export async function rowOf(id: string) {
+  const [found] = await findRow(id);
+  if (!found) {
+    throw new Error("the envelope this test needs was never stored");
+  }
+  return found;
+}
+
+/**
+ * Puts a secret's expiry in the past, which is the only way to test that a read
+ * notices. Expiry is a timestamp comparison on every read rather than a flag some
+ * sweep sets, so nothing else has to have run for this to take effect.
+ */
+export async function expire(id: string): Promise<void> {
+  await db
+    .update(secrets)
+    .set({ expiresAt: sql`now() - interval '1 minute'` })
+    .where(eq(secrets.id, id));
+}
+
+/** The day's counter for one of the four things worth counting. */
+export async function countToday(
+  name: "creates" | "reveals" | "burns" | "expiries"
+): Promise<number> {
+  const [today] = await db
+    .select({ count: dailyCounters[name] })
+    .from(dailyCounters)
+    .where(eq(dailyCounters.day, sql`current_date`));
+
+  return today?.count ?? 0;
+}
