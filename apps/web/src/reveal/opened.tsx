@@ -123,7 +123,10 @@ export function Opened({
             onCopy={toClipboard}
             tone={part.tone ?? "mono"}
             value={part.value}
-            verbatim={part.verbatim ?? false}
+            /* The desk row has room for a password on one line, so it reads as one.
+             * The phone's does not, and a wrapped password has to say where it ends
+             * and carry its own character count: see verbatim in CopyRow. */
+            verbatim={!atDesk && (part.verbatim ?? false)}
           />
         ))}
 

@@ -130,6 +130,10 @@ function Used({ answered }: { answered: Answered | null }) {
  * Same composition as `used`, words only. Nothing was read here, so there is nobody
  * to suspect and no accusation to make: the sender did this on purpose, and the only
  * useful thing left to say is to ask them again.
+ *
+ * The words key on the state rather than on the burn reason the row also carries,
+ * because in v0 there is exactly one reason and the reason is this. A second one would
+ * be a second variant of this screen, and it would read it then.
  */
 function Burned({ answered }: { answered: Answered | null }) {
   const when = answered?.burnedAt;
@@ -137,7 +141,7 @@ function Burned({ answered }: { answered: Answered | null }) {
   return (
     <DeadEnd
       badge={<Badge state="gone">Burned</Badge>}
-      body={`The sender destroyed it ${when ? since(when) : "before it was opened"}, and nobody read it. A burned link can't be brought back.`}
+      body={`They destroyed it ${when ? since(when) : "before anybody opened it"}, and nobody read it. A burned link can't be brought back.`}
       footnote="Ask whoever sent it for a new one."
       heading="The sender burned this link."
     />

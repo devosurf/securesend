@@ -40,18 +40,10 @@ export const Route = createFileRoute("/s/$id")({
 });
 
 /** The screens that still have something to do, which are the ones wearing the wash. */
-const LIVE = ["asking", "sealed", "retry", "open"];
+const LIVE = ["sealed", "retry", "open"];
 
 function Body({ revealing }: { revealing: Revealing }) {
   const { answered, screen, secret } = revealing;
-
-  if (screen === "asking") {
-    /* One request, and it is fast. What holds the space is the shell the reader is
-     * already looking at, because the alternatives are a spinner, which this product
-     * does not have, or the latch drawn optimistically, which would say "nobody has
-     * read it" before anybody had asked. */
-    return null;
-  }
 
   if (screen === "sealed" || screen === "retry") {
     return <Latch revealing={revealing} />;
@@ -81,25 +73,32 @@ function Reveal() {
   const { screen, secret, taken, takeAll } = revealing;
 
   /* A thumb-height band, and only where one is needed: the take control is the page's
-   * floor on a phone and the panel's last row at a desk. */
+   * floor on a phone and the panel's last row at a desk. The Shell owns the band itself,
+   * so this hands over what goes in it and nothing about how it sits. */
   const floor =
     screen === "open" && secret && worthTaking(secret) ? (
-      <div className="border-hairline border-t bg-surface-sunken px-5 pt-4 pb-6">
-        <div className="flex flex-col items-stretch gap-3">
-          <TakeBar onTake={takeAll} secret={secret} taken={taken} />
-        </div>
-      </div>
+      <TakeBar onTake={takeAll} secret={secret} taken={taken} />
     ) : undefined;
 
   return (
     <Shell {...(floor && { floor })} wash={LIVE.includes(screen)}>
-      <PhaseSwap
-        className="w-full flex-1 md:flex-none"
-        move={screen === "open" ? "reveal" : "burn"}
-        phase={screen}
-      >
-        <Body revealing={revealing} />
-      </PhaseSwap>
+      {/*
+       * Nothing until the lookup has answered, and that is what keeps an arrived-in
+       * state still. PhaseSwap does not animate the state it mounts in, so a dead end
+       * the recipient landed on is simply there, and only a press after that plays a
+       * move. Holding an empty shell for one request is the cost: the alternatives are
+       * a spinner, which this product does not have, or the latch drawn optimistically,
+       * which would say "nobody has read it" before anybody had asked.
+       */}
+      {screen === "asking" ? null : (
+        <PhaseSwap
+          className="w-full flex-1 md:flex-none"
+          move={screen === "open" ? "reveal" : "burn"}
+          phase={screen}
+        >
+          <Body revealing={revealing} />
+        </PhaseSwap>
+      )}
     </Shell>
   );
 }

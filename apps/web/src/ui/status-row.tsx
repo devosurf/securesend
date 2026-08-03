@@ -284,7 +284,13 @@ export function StatusRow({
   return (
     <div
       className={cn(
-        "grid grid-cols-[180px_minmax(0,1fr)] items-center gap-x-4 px-4 py-2",
+        /* The id column takes exactly what an id needs rather than a fixed width.
+         * Every row on a device shares one host and every secret id is the same 22
+         * characters, so `auto` lines the rows up as precisely as a measured column
+         * would, and unlike a measured one it cannot cut the tail off. Truncating here
+         * would be the worst possible truncation: the characters after the last slash
+         * are the only thing telling one row from another. */
+        "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 px-4 py-2",
         className
       )}
     >

@@ -64,12 +64,13 @@ export interface Revealing {
 }
 
 /*
- * The key, read once per page.
+ * The key, taken once per page.
  *
- * takeKey empties the address bar as it reads, so a second read finds nothing.
- * React renders a component twice in development precisely to surface impure work in
- * a render, and this work is impure on purpose, so the memo lives out here rather
- * than in a ref or an effect, both of which get re-run by the same check.
+ * takeKey empties the address bar as it reads, so a second read finds nothing. Two
+ * things make that happen more than once if it is not guarded. React renders and runs
+ * effects twice in development, deliberately, to surface work that cannot be repeated;
+ * and rewriting the address is exactly that kind of work, which is why the memo lives
+ * out here rather than in a ref, where the same check would rebuild it.
  *
  * Keyed on the path, so a different secret is a different read.
  */
@@ -84,12 +85,14 @@ function keyForThisPage(path: string): FragmentTokenResult {
 }
 
 export function useRevealing(id: string): Revealing {
-  const key = keyForThisPage(`/s/${id}`);
-  const needsPassword = key.status === "ok" && key.token.needsPassword;
+  /* Not read during a render, because taking the key rewrites this tab's address and
+   * the router is listening: a history change made while rendering is a state update in
+   * another component while rendering. So the first paint is `asking`, which draws
+   * nothing, and the effect below decides within a frame. */
+  const [key, setKey] = useState<FragmentTokenResult | null>(null);
+  const needsPassword = key?.status === "ok" && key.token.needsPassword;
 
-  const [screen, setScreen] = useState<Screen>(
-    key.status === "ok" ? "asking" : "incomplete"
-  );
+  const [screen, setScreen] = useState<Screen>("asking");
   const [answered, setAnswered] = useState<Answered | null>(null);
   const [secret, setSecret] = useState<OpenedEnvelope | null>(null);
   const [password, setPassword] = useState("");
@@ -105,15 +108,23 @@ export function useRevealing(id: string): Revealing {
   const inFlight = useRef<Promise<void> | null>(null);
 
   /*
-   * The lookup, exactly once.
+   * The key, and then the lookup. Once each.
    *
-   * Not a query and deliberately not cached: this answer is true at the moment it is
-   * given and a refetch on a window regaining focus would paint "already used" over
-   * an open secret. Nothing here retries either, because a link that could not be
-   * asked about is a thing to say out loud rather than to keep quietly asking.
+   * A link that arrived without its key is answered here, before anything is asked of
+   * the instance, which is what makes that dead end calm: nothing was fetched and
+   * nothing was destroyed finding out.
+   *
+   * The lookup is not a query and deliberately not cached: this answer is true at the
+   * moment it is given, and a refetch on a window regaining focus would paint "already
+   * used" over an open secret. Nothing here retries either, because a link that could
+   * not be asked about is a thing to say out loud rather than to keep quietly asking.
    */
   useEffect(() => {
-    if (key.status !== "ok") {
+    const mine = keyForThisPage(`/s/${id}`);
+    setKey(mine);
+
+    if (mine.status !== "ok") {
+      setScreen("incomplete");
       return () => undefined;
     }
 
@@ -129,11 +140,11 @@ export function useRevealing(id: string): Revealing {
     return () => {
       listening = false;
     };
-  }, [id, key.status]);
+  }, [id]);
 
   /** Opens what this tab holds, and picks the screen the answer means. */
   async function open(envelope: Ciphertext, tried: string) {
-    if (key.status !== "ok") {
+    if (key?.status !== "ok") {
       return;
     }
 
