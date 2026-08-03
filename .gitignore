@@ -22,5 +22,9 @@ test-results/
 blob-report/
 .playwright/
 
+# What vitest browser mode leaves behind when a test fails.
+.vitest-attachments/
+__screenshots__/
+
 .vite/
 .tanstack/
