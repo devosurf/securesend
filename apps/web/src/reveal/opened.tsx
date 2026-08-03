@@ -1,6 +1,6 @@
 import type { OpenedEnvelope, OpenedFile } from "@securesend/crypto/envelope";
-import { spokenSize } from "../compose/composing";
 import { useAtDesk } from "../lib/lane";
+import { spokenSize } from "../lib/sizes";
 import { cn } from "../lib/utils";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -75,14 +75,29 @@ function filesNamed(files: readonly OpenedFile[]): string {
 /**
  * What the bar is about to do, or did, named in halves so nothing is a surprise
  * and nothing is claimed twice.
+ *
+ * The two lanes offer differently and report the same, which is what the frames
+ * fix. A phone names both destinations before the press because the panel runs
+ * past the fold there and naming them is the fold marker, without a scroll hint
+ * that would have to lie. A desk can see the rows, so it says the short thing.
+ * Afterwards both say exactly where each half went, because the confirmation is
+ * the whole idea and silence is the version of it that fails.
  */
-function barSays(secret: OpenedEnvelope, taken: boolean): string {
+function barSays(
+  secret: OpenedEnvelope,
+  taken: boolean,
+  atDesk: boolean
+): string {
   const text = textNamed(secret);
   const files = secret.files.length > 0 ? filesNamed(secret.files) : null;
 
   if (text && files) {
-    return taken
-      ? `${text.taken}. ${files} saved to your downloads.`
+    if (taken) {
+      return `${text.taken}. ${files} saved to your downloads.`;
+    }
+
+    return atDesk
+      ? `Copies the text and saves ${files}, in one go.`
       : `One press: ${text.takes} to your clipboard, ${files} to your downloads.`;
   }
   if (files) {
@@ -115,7 +130,7 @@ export function TakeBar({
   return (
     <>
       <p className="font-sans text-ink-muted text-small">
-        {barSays(secret, taken)}
+        {barSays(secret, taken, atDesk)}
       </p>
       <TakeButton
         className="w-full md:w-auto"

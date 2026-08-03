@@ -29,7 +29,7 @@ export interface ReleasedAttachment {
 type Taking = Pick<typeof db, "delete">;
 
 /**
- * Every attachment a secret holds, gone by the time this returns.
+ * Every attachment a secret holds, released and gone by the time this returns.
  *
  * It has to run inside the transaction that claimed the secrets row, because that
  * claim is what decides who may have these. Ordering is done here rather than in
@@ -56,4 +56,19 @@ export async function takeAttachments(
       iv: bytesToBase64url(row.iv),
     }))
     .sort((one, other) => one.index - other.index);
+}
+
+/**
+ * The same death without the release, for a burn: nobody is owed what was in
+ * these, so nothing comes back.
+ *
+ * It is a separate statement rather than a discarded return because the
+ * difference is ten megabytes. Asking for the rows would ship every blob into
+ * this process and base64 it on the way, a third bigger again, to throw it away.
+ */
+export async function scrubAttachments(
+  on: Taking,
+  secretId: string
+): Promise<void> {
+  await on.delete(attachments).where(eq(attachments.secretId, secretId));
 }

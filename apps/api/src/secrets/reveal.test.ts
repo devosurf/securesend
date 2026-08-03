@@ -4,14 +4,8 @@ import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../app";
 import { closeDatabase, db } from "../db/client";
 import { secrets } from "../db/schema";
-import {
-  type Attachment,
-  attachmentRowsOf,
-  countToday,
-  expire,
-  rowOf,
-  seal,
-} from "./testing";
+import type { ReleasedAttachment } from "./attachments";
+import { attachmentRowsOf, countToday, expire, rowOf, seal } from "./testing";
 
 afterAll(closeDatabase);
 
@@ -41,14 +35,14 @@ const NOT_FOUND = 404;
 const GONE = 410;
 
 interface Released {
-  attachments: Attachment[];
+  attachments: ReleasedAttachment[];
   envelope: { ciphertext: string; iv: string };
   id: string;
 }
 
 /** What one presser got back: the payload, or the reason there was none. */
 interface Answer {
-  attachments?: Attachment[];
+  attachments?: ReleasedAttachment[];
   envelope?: { ciphertext: string; iv: string };
   state?: string;
 }
@@ -220,15 +214,21 @@ describe("POST /api/secrets/:id/reveal, with files", () => {
     expect(await attachmentRowsOf(sealed.id)).toStrictEqual([]);
   });
 
-  it("releases nothing from an expired secret, and keeps its files sealed", async () => {
+  /* Expiry is a timestamp comparison on every read, so a clock running out is
+   * enough to refuse the press. Clearing the row out afterwards is the sweep's
+   * job and the sweep does not exist yet, for envelopes either: what this pins is
+   * that nothing is released, not that the files are meant to sit there. */
+  it("releases nothing from an expired secret, files included", async () => {
     const sealed = await seal("24h", 2);
     await expire(sealed.id);
 
     const response = await press(sealed.id);
-
     expect(response.status).toBe(GONE);
-    expect(await response.json()).toMatchObject({ state: "expired" });
-    expect(await attachmentRowsOf(sealed.id)).toHaveLength(2);
+
+    const answer = (await response.json()) as Answer;
+    expect(answer.state).toBe("expired");
+    expect(answer.attachments).toBeUndefined();
+    expect(answer.envelope).toBeUndefined();
   });
 
   it("says nothing about files to the second presser", async () => {

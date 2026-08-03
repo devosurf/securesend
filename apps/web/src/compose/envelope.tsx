@@ -1,5 +1,6 @@
 import { type ReactNode, useRef } from "react";
 import { useAtDesk } from "../lib/lane";
+import { spokenSize } from "../lib/sizes";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { Collapse } from "../ui/collapse";
@@ -11,7 +12,7 @@ import { Icon } from "../ui/icon";
 import { OptionsRow } from "../ui/options-row";
 import { Panel } from "../ui/panel";
 import { SwapRow } from "../ui/swap-row";
-import { spokenSize, useComposing } from "./composing";
+import { useComposing } from "./composing";
 import type { SendProblem } from "./seal-and-send";
 
 /*

@@ -85,7 +85,7 @@ export type SendProblem =
   | "unreadable-file";
 
 export interface SendFailure extends ErrorOptions {
-  /** Bytes: the cap that was hit, whoever refused the envelope for it. */
+  /** The cap that was hit, whoever refused it for: bytes, or files for a count. */
   limit?: number | undefined;
 }
 
@@ -175,6 +175,30 @@ function totalBytes(draft: Draft): number {
   );
 }
 
+export interface OverCap {
+  limit: number;
+  problem: SendProblem;
+}
+
+/**
+ * Which of the two file caps a secret of this shape breaks, if it breaks one.
+ *
+ * Exported because the composer has to ask the same question one moment earlier:
+ * a file that cannot be sent should be refused as it is attached rather than
+ * accepted into a row and then held against the sender at the press. Two
+ * spellings of the same two caps is how the row and the press start disagreeing.
+ */
+export function overCap(files: number, bytes: number): OverCap | null {
+  if (files > MAX_ATTACHMENTS) {
+    return { limit: MAX_ATTACHMENTS, problem: "too-many-files" };
+  }
+  if (bytes > MAX_TOTAL_BYTES) {
+    return { limit: MAX_TOTAL_BYTES, problem: "files-too-big" };
+  }
+
+  return null;
+}
+
 /** The cap the instance named, or this browser's own when it named none. */
 function limitFrom(said: unknown): number {
   if (typeof said === "object" && said !== null && "limit" in said) {
@@ -194,11 +218,10 @@ export async function sealAndSend(
   if (textBytes(draft) > MAX_ENVELOPE_BYTES) {
     throw new SendFailedError("too-big", { limit: MAX_ENVELOPE_BYTES });
   }
-  if ((draft.files?.length ?? 0) > MAX_ATTACHMENTS) {
-    throw new SendFailedError("too-many-files", { limit: MAX_ATTACHMENTS });
-  }
-  if (totalBytes(draft) > MAX_TOTAL_BYTES) {
-    throw new SendFailedError("files-too-big", { limit: MAX_TOTAL_BYTES });
+
+  const broken = overCap(draft.files?.length ?? 0, totalBytes(draft));
+  if (broken) {
+    throw new SendFailedError(broken.problem, { limit: broken.limit });
   }
 
   const origin = around.origin ?? window.location.origin;

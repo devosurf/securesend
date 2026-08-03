@@ -189,7 +189,7 @@ export async function spend(
   if (response.status === OK) {
     return isHeld(said)
       ? {
-          attachments: said.attachments ?? [],
+          attachments: said.attachments,
           envelope: said.envelope,
           status: "held",
         }
@@ -226,28 +226,28 @@ function isAttachment(value: unknown): value is AttachmentCiphertext {
 }
 
 /*
- * An answer this browser can work with, or not one at all. The attachments may be
- * absent, which is a secret with no files, but an answer carrying something that
- * is not an attachment list is unreadable rather than half a secret: reading it
- * loosely would hand the recipient a note whose file quietly never arrived.
+ * An answer this browser can work with, or not one at all.
+ *
+ * A secret with no files answers with an empty list rather than with no list, so
+ * both halves have to be there. Reading it loosely would mean an answer that lost
+ * its attachments on the way handed the recipient a note whose file quietly never
+ * arrived, and there is no older instance to be lenient towards: the api and this
+ * app ship in one container at one version.
  */
 function isHeld(
   value: unknown
-): value is { attachments?: AttachmentCiphertext[]; envelope: Ciphertext } {
+): value is { attachments: AttachmentCiphertext[]; envelope: Ciphertext } {
   if (typeof value !== "object" || value === null) {
     return false;
   }
 
   const { attachments, envelope } = value as Record<string, unknown>;
 
-  if (
-    attachments !== undefined &&
-    !(Array.isArray(attachments) && attachments.every(isAttachment))
-  ) {
-    return false;
-  }
-
-  return isCiphertext(envelope);
+  return (
+    Array.isArray(attachments) &&
+    attachments.every(isAttachment) &&
+    isCiphertext(envelope)
+  );
 }
 
 /**
@@ -262,7 +262,7 @@ function isHeld(
  * try again is always better than a page that fell over holding the only copy.
  */
 export async function unseal(held: {
-  attachments?: AttachmentCiphertext[] | undefined;
+  attachments: AttachmentCiphertext[];
   envelope: Ciphertext;
   id: string;
   password?: string | undefined;
@@ -277,7 +277,7 @@ export async function unseal(held: {
     const secret = await openEnvelope({
       ...(password !== undefined && { password }),
       stored: {
-        attachments: held.attachments ?? [],
+        attachments: held.attachments,
         envelope: held.envelope,
         id: held.id,
       },

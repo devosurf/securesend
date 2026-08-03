@@ -112,9 +112,12 @@ a rewrite of everything behind it.
 
 Beside the four seams there is the **claims audit**, which is not a behaviour
 test but a check that the product's public claims stay true: the banned words are
-absent, the required headers are present, nothing the pages load comes from
-another origin, and no filename ever reaches the instance. Some of it lives in
-`apps/web/src/third-party.node.test.ts`, in the api's header tests and in
-`apps/api/src/secrets/filenames.test.ts`; the rest belongs in CI. The filename
-audit is the one api test that encrypts something first, because a claim about
-what the server cannot see is only checkable against a real name.
+absent, the required headers are present, and nothing the pages load comes from
+another origin. Some of it lives in `apps/web/src/third-party.node.test.ts` and
+in the api's header tests; the rest belongs in CI.
+
+A claim can need two seams, and "the instance never sees a filename" is the one
+that does: the compose seam proves the name never reaches the request, and the
+api seam proves what was posted is what is stored, byte for byte. Neither test
+crosses into the other's side, because the api has no DOM lib and importing the
+encryption module there does not compile.

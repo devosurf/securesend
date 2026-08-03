@@ -218,9 +218,7 @@ describe("lookUp", () => {
 describe("spend", () => {
   it("hands back the ciphertext the instance was holding", async () => {
     const made = await sealed();
-    const server = instance(() =>
-      Response.json({ envelope: made.stored.envelope, id: made.id })
-    );
+    const server = instance(() => Response.json({ ...made.stored }));
 
     const spent = await spend(made.id, server);
 
@@ -232,9 +230,7 @@ describe("spend", () => {
 
   it("never sends the key or a password with the press", async () => {
     const made = await sealed("northwind");
-    const server = instance(() =>
-      Response.json({ envelope: made.stored.envelope, id: made.id })
-    );
+    const server = instance(() => Response.json({ ...made.stored }));
 
     await spend(made.id, server);
 
@@ -246,9 +242,7 @@ describe("spend", () => {
 
   it("presses once, and the press carries no body at all", async () => {
     const made = await sealed();
-    const server = instance(() =>
-      Response.json({ envelope: made.stored.envelope, id: made.id })
-    );
+    const server = instance(() => Response.json({ ...made.stored }));
 
     await spend(made.id, server);
 
@@ -302,15 +296,26 @@ describe("spend", () => {
     );
   });
 
-  it("takes an answer with no attachments in it as no files", async () => {
+  it("hands back an empty list for a secret that carried no files", async () => {
     const made = await sealed();
-    const server = instance(() =>
-      Response.json({ envelope: made.stored.envelope, id: made.id })
-    );
+    const server = instance(() => Response.json({ ...made.stored }));
 
     const spent = await spend(made.id, server);
 
     expect(spent.status === "held" && spent.attachments).toStrictEqual([]);
+  });
+
+  /* No files is an empty list, never a missing one. So an answer without the field
+   * is one this browser cannot read rather than a secret with nothing attached:
+   * being lenient here is how a note whose file went astray would open looking
+   * whole. There is no older instance to be lenient towards either. */
+  it("says nothing answered when the attachments are missing entirely", async () => {
+    const made = await sealedWithFile();
+    const server = instance(() =>
+      Response.json({ envelope: made.stored.envelope, id: made.id })
+    );
+
+    expect((await spend(made.id, server)).status).toBe("unreachable");
   });
 
   /* An answer this browser cannot read is not a dead secret, and it is not half a
@@ -335,6 +340,7 @@ describe("unseal", () => {
     const made = await sealed();
 
     const opened = await unseal({
+      attachments: [],
       envelope: made.stored.envelope,
       id: made.id,
       token: keyOf(made.fragmentToken),
@@ -357,6 +363,7 @@ describe("unseal", () => {
   it("fails a wrong password locally, then opens on the right one", async () => {
     const made = await sealed("northwind");
     const held = {
+      attachments: [],
       envelope: made.stored.envelope,
       id: made.id,
       token: keyOf(made.fragmentToken),
@@ -379,6 +386,7 @@ describe("unseal", () => {
     const made = await sealed("northwind");
 
     const opened = await unseal({
+      attachments: [],
       envelope: made.stored.envelope,
       id: made.id,
       token: keyOf(made.fragmentToken),
@@ -394,6 +402,7 @@ describe("unseal", () => {
     const other = await sealed();
 
     const opened = await unseal({
+      attachments: [],
       envelope: made.stored.envelope,
       id: made.id,
       token: keyOf(other.fragmentToken),
@@ -408,6 +417,7 @@ describe("unseal", () => {
     const made = await sealed();
 
     const opened = await unseal({
+      attachments: [],
       envelope: made.stored.envelope,
       id: newSecretId(),
       token: keyOf(made.fragmentToken),

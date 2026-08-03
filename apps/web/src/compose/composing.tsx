@@ -13,9 +13,8 @@ import { SETTLE_MS } from "../ui/collapse";
 import {
   type Draft,
   type Expiry,
-  MAX_ATTACHMENTS,
   MAX_ENVELOPE_BYTES,
-  MAX_TOTAL_BYTES,
+  overCap,
   pairIsFilled,
   type SecretLink,
   SendFailedError,
@@ -103,8 +102,6 @@ const SPOKEN: Record<Expiry, string> = {
   "72h": "72 hours",
 };
 
-const KIB = 1024;
-
 export interface Composing {
   addPair: () => void;
   addSeal: () => void;
@@ -181,19 +178,6 @@ export function useComposing(): Composing {
 
 export function spokenExpiry(expiry: Expiry): string {
   return SPOKEN[expiry];
-}
-
-/**
- * "256 KB", for a sentence that has to name a cap and for the size beside a
- * filename. Nothing rounds to zero: a file of a few hundred bytes is a real file,
- * and a row reading "0 KB" would look like one that failed to attach.
- */
-export function spokenSize(bytes: number): string {
-  const kib = bytes / KIB;
-
-  return kib >= KIB
-    ? `${(kib / KIB).toFixed(1)} MB`
-    : `${Math.max(1, Math.round(kib))} KB`;
 }
 
 function isExpiry(value: string): value is Expiry {
@@ -397,21 +381,18 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
    * sentence. This one is the early answer, not the ruling.
    */
   async function attach(chosen: ArrayLike<File>) {
-    const picked = [...Array.from(chosen)];
+    const picked = Array.from(chosen);
     if (picked.length === 0) {
       return;
     }
 
-    if (files.length + picked.length > MAX_ATTACHMENTS) {
-      setProblem("too-many-files");
-      setLimit(MAX_ATTACHMENTS);
-      return;
-    }
-
-    const weight = picked.reduce((sum, one) => sum + one.size, weightOf(files));
-    if (weight > MAX_TOTAL_BYTES) {
-      setProblem("files-too-big");
-      setLimit(MAX_TOTAL_BYTES);
+    const broken = overCap(
+      files.length + picked.length,
+      picked.reduce((sum, one) => sum + one.size, weightOf(files))
+    );
+    if (broken) {
+      setProblem(broken.problem);
+      setLimit(broken.limit);
       return;
     }
 
