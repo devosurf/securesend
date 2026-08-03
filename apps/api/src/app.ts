@@ -3,6 +3,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "./db/client";
+import { securityHeaders } from "./headers";
 
 const WEB_BUILD = "./public";
 const UNAVAILABLE = 503;
@@ -28,7 +29,9 @@ const api = new Hono().get("/health", async (c) => {
   return c.json({ status: "unavailable" }, UNAVAILABLE);
 });
 
-const app = new Hono().route("/api", api);
+// The bundle is first in the chain, so it rides every response the process can
+// make: the api, the static build, and the 404s.
+const app = new Hono().use("*", securityHeaders).route("/api", api);
 
 export type AppType = typeof app;
 
