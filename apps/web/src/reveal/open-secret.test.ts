@@ -91,6 +91,26 @@ async function sealed(password?: string) {
   return { ...made, id: made.stored.id };
 }
 
+const PROFILE = new Uint8Array([
+  0x23, 0x20, 0x6f, 0x76, 0x70, 0x6e, 0x0a, 0xff,
+]);
+
+/** The same, with a file in it, which is a second ciphertext on the wire. */
+async function sealedWithFile() {
+  const made = await sealEnvelope({
+    files: [
+      {
+        bytes: PROFILE,
+        name: "northwind-vpn-profile.ovpn",
+        type: "application/x-openvpn-profile",
+      },
+    ],
+    note: "vpn access for the migration",
+  });
+
+  return { ...made, id: made.stored.id };
+}
+
 function keyOf(fragmentToken: string) {
   const read = takeKey(address(`#${fragmentToken}`).at);
   if (read.status !== "ok") {
@@ -270,6 +290,44 @@ describe("spend", () => {
 
     expect(spent.status).toBe("unreachable");
   });
+
+  it("hands back the attachments that came with the envelope", async () => {
+    const made = await sealedWithFile();
+    const server = instance(() => Response.json({ ...made.stored }));
+
+    const spent = await spend(made.id, server);
+
+    expect(spent.status === "held" && spent.attachments).toStrictEqual(
+      made.stored.attachments
+    );
+  });
+
+  it("takes an answer with no attachments in it as no files", async () => {
+    const made = await sealed();
+    const server = instance(() =>
+      Response.json({ envelope: made.stored.envelope, id: made.id })
+    );
+
+    const spent = await spend(made.id, server);
+
+    expect(spent.status === "held" && spent.attachments).toStrictEqual([]);
+  });
+
+  /* An answer this browser cannot read is not a dead secret, and it is not half a
+   * secret either. It reads as nothing having answered, the same as an unreadable
+   * status does, rather than as an envelope missing its files. */
+  it("says nothing answered when the attachments are not attachments", async () => {
+    const made = await sealedWithFile();
+    const server = instance(() =>
+      Response.json({
+        attachments: [{ index: "first" }],
+        envelope: made.stored.envelope,
+        id: made.id,
+      })
+    );
+
+    expect((await spend(made.id, server)).status).toBe("unreachable");
+  });
 });
 
 describe("unseal", () => {
@@ -352,6 +410,41 @@ describe("unseal", () => {
     const opened = await unseal({
       envelope: made.stored.envelope,
       id: newSecretId(),
+      token: keyOf(made.fragmentToken),
+    });
+
+    expect(opened.status).toBe("closed");
+  });
+
+  it("opens the file that came back with the envelope", async () => {
+    const made = await sealedWithFile();
+
+    const opened = await unseal({
+      attachments: made.stored.attachments,
+      envelope: made.stored.envelope,
+      id: made.id,
+      token: keyOf(made.fragmentToken),
+    });
+
+    expect(opened.status === "open" && opened.secret.files).toStrictEqual([
+      {
+        bytes: PROFILE,
+        name: "northwind-vpn-profile.ovpn",
+        size: PROFILE.length,
+        type: "application/x-openvpn-profile",
+      },
+    ]);
+  });
+
+  /* An envelope opens as one thing. Handing over the note while the file it names
+   * is missing would be a partial secret that reads as a whole one. */
+  it("stays shut when the envelope names a file that did not come back", async () => {
+    const made = await sealedWithFile();
+
+    const opened = await unseal({
+      attachments: [],
+      envelope: made.stored.envelope,
+      id: made.id,
       token: keyOf(made.fragmentToken),
     });
 

@@ -1,7 +1,15 @@
-import type { Ciphertext, OpenedEnvelope } from "@securesend/crypto/envelope";
+import type { OpenedEnvelope } from "@securesend/crypto/envelope";
 import type { FragmentTokenResult } from "@securesend/crypto/fragment";
 import { useEffect, useRef, useState } from "react";
-import { type Answered, lookUp, spend, takeKey, unseal } from "./open-secret";
+import { saveFile } from "./downloads";
+import {
+  type Answered,
+  type Held,
+  lookUp,
+  spend,
+  takeKey,
+  unseal,
+} from "./open-secret";
 import { allOf } from "./parts";
 
 /*
@@ -104,7 +112,7 @@ export function useRevealing(id: string): Revealing {
   /* The ciphertext, once the press has taken it, and from then on the only copy of
    * this secret anywhere. Nothing draws it; what it is here for is the retry, which
    * opens it again with a different password and never asks the instance twice. */
-  const [held, setHeld] = useState<Ciphertext | null>(null);
+  const [held, setHeld] = useState<Held | null>(null);
   const inFlight = useRef<Promise<void> | null>(null);
 
   /*
@@ -143,13 +151,13 @@ export function useRevealing(id: string): Revealing {
   }, [id]);
 
   /** Opens what this tab holds, and picks the screen the answer means. */
-  async function open(envelope: Ciphertext, tried: string) {
+  async function open(ciphertexts: Held, tried: string) {
     if (key?.status !== "ok") {
       return;
     }
 
     const opened = await unseal({
-      envelope,
+      ...ciphertexts,
       id,
       ...(key.token.needsPassword && { password: tried }),
       token: key.token,
@@ -210,8 +218,13 @@ export function useRevealing(id: string): Revealing {
         return;
       }
 
-      setHeld(spent.envelope);
-      await open(spent.envelope, password);
+      const ciphertexts = {
+        attachments: spent.attachments,
+        envelope: spent.envelope,
+      };
+
+      setHeld(ciphertexts);
+      await open(ciphertexts, password);
     } finally {
       setBusy(false);
     }
@@ -231,20 +244,37 @@ export function useRevealing(id: string): Revealing {
   }
 
   /*
-   * The take, which is a clipboard write and nothing else.
+   * The take: one press, two destinations.
    *
-   * It is here rather than in the screen because the bar that reports it sits in two
-   * different places at the two widths, inside the panel at a desk and on the page's
-   * floor on a phone, and both have to agree about whether it has happened. A refused
-   * clipboard leaves `taken` false, so the bar never claims a write the browser
-   * declined.
+   * The recipient does not care whether a thing travels by clipboard or by
+   * download, only that it is out of here before the tab closes. So this stops
+   * making them pick a container and does both in the same gesture.
+   *
+   * The files go first, and before anything is awaited, because a download may
+   * only be started while the press is still the browser's idea of a user gesture
+   * and an await spends that. A refused clipboard then leaves `taken` false, so
+   * the bar never claims a write the browser declined, while the files it already
+   * started are on their way regardless: half a secret out of a dying tab beats
+   * none of it.
+   *
+   * It is here rather than in the screen because the bar that reports it sits in
+   * two different places at the two widths, inside the panel at a desk and on the
+   * page's floor on a phone, and both have to agree about whether it happened.
    */
   async function takeAll() {
     if (!secret) {
       return;
     }
 
-    await navigator.clipboard.writeText(allOf(secret));
+    for (const file of secret.files) {
+      saveFile(file);
+    }
+
+    const text = allOf(secret);
+    if (text !== "") {
+      await navigator.clipboard.writeText(text);
+    }
+
     setTaken(true);
   }
 

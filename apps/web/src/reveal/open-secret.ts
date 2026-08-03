@@ -1,4 +1,5 @@
 import {
+  type AttachmentCiphertext,
   type Ciphertext,
   type OpenedEnvelope,
   openEnvelope,
@@ -67,9 +68,15 @@ export interface Arrival {
   state: ArrivalState;
 }
 
+/** Every ciphertext the secret was made of, which is one per part plus the json. */
+export interface Held {
+  attachments: AttachmentCiphertext[];
+  envelope: Ciphertext;
+}
+
 export type Spent =
   /** The ciphertext, now in this tab and nowhere else on earth. */
-  | { status: "held"; envelope: Ciphertext }
+  | ({ status: "held" } & Held)
   /** The press landed on something already dead. The page says which. */
   | { status: "gone"; arrival: Arrival }
   /** Nothing answered, so nothing was spent and the press can happen again. */
@@ -181,7 +188,11 @@ export async function spend(
 
   if (response.status === OK) {
     return isHeld(said)
-      ? { envelope: said.envelope, status: "held" }
+      ? {
+          attachments: said.attachments ?? [],
+          envelope: said.envelope,
+          status: "held",
+        }
       : { status: "unreachable" };
   }
 
@@ -194,19 +205,49 @@ export async function spend(
     : { status: "unreachable" };
 }
 
-function isHeld(value: unknown): value is { envelope: Ciphertext } {
+function isCiphertext(value: unknown): value is Ciphertext {
   if (typeof value !== "object" || value === null) {
     return false;
   }
 
-  const { envelope } = value as Record<string, unknown>;
-  if (typeof envelope !== "object" || envelope === null) {
+  const { ciphertext, iv } = value as Record<string, unknown>;
+
+  return typeof ciphertext === "string" && typeof iv === "string";
+}
+
+function isAttachment(value: unknown): value is AttachmentCiphertext {
+  if (typeof value !== "object" || value === null) {
     return false;
   }
 
-  const { ciphertext, iv } = envelope as Record<string, unknown>;
+  const { index } = value as Record<string, unknown>;
 
-  return typeof ciphertext === "string" && typeof iv === "string";
+  return typeof index === "number" && isCiphertext(value);
+}
+
+/*
+ * An answer this browser can work with, or not one at all. The attachments may be
+ * absent, which is a secret with no files, but an answer carrying something that
+ * is not an attachment list is unreadable rather than half a secret: reading it
+ * loosely would hand the recipient a note whose file quietly never arrived.
+ */
+function isHeld(
+  value: unknown
+): value is { attachments?: AttachmentCiphertext[]; envelope: Ciphertext } {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const { attachments, envelope } = value as Record<string, unknown>;
+
+  if (
+    attachments !== undefined &&
+    !(Array.isArray(attachments) && attachments.every(isAttachment))
+  ) {
+    return false;
+  }
+
+  return isCiphertext(envelope);
 }
 
 /**
@@ -221,6 +262,7 @@ function isHeld(value: unknown): value is { envelope: Ciphertext } {
  * try again is always better than a page that fell over holding the only copy.
  */
 export async function unseal(held: {
+  attachments?: AttachmentCiphertext[] | undefined;
   envelope: Ciphertext;
   id: string;
   password?: string | undefined;
@@ -234,7 +276,11 @@ export async function unseal(held: {
   try {
     const secret = await openEnvelope({
       ...(password !== undefined && { password }),
-      stored: { attachments: [], envelope: held.envelope, id: held.id },
+      stored: {
+        attachments: held.attachments ?? [],
+        envelope: held.envelope,
+        id: held.id,
+      },
       token: held.token,
     });
 

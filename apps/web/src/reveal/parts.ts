@@ -41,11 +41,13 @@ export function partsOf(secret: OpenedEnvelope): Part[] {
 }
 
 /**
- * Everything, as one block of text, labelled the way somebody would say it aloud.
+ * Everything that goes on a clipboard, as one block of text, labelled the way
+ * somebody would say it aloud. Empty when the secret was only files.
  *
  * The note comes first and whole, then the pair on a line each, because what lands on
  * the clipboard is usually pasted straight into a chat or a note app where a label is
- * the only thing telling the two apart.
+ * the only thing telling the two apart. Files are not in here: they go to the disk,
+ * and a filename on a clipboard would be a name with no file behind it.
  */
 export function allOf(secret: OpenedEnvelope): string {
   const blocks: string[] = [];
@@ -64,9 +66,12 @@ export function allOf(secret: OpenedEnvelope): string {
 
 /**
  * Whether one press is worth offering at all. With a single row the row's own Copy
- * already is one press, and a second control doing the same thing would be the bar
- * claiming work it is not doing.
+ * or Download already is one press, and a second control doing the same thing
+ * would be the bar claiming work it is not doing.
+ *
+ * A file counts as a row here even though it is not a Part: the two go to
+ * different places, and taking them in one gesture is the whole idea.
  */
 export function worthTaking(secret: OpenedEnvelope): boolean {
-  return partsOf(secret).length > 1;
+  return partsOf(secret).length + secret.files.length > 1;
 }

@@ -1,12 +1,15 @@
-import type { OpenedEnvelope } from "@securesend/crypto/envelope";
+import type { OpenedEnvelope, OpenedFile } from "@securesend/crypto/envelope";
+import { spokenSize } from "../compose/composing";
 import { useAtDesk } from "../lib/lane";
 import { cn } from "../lib/utils";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { CopyRow } from "../ui/copy-row";
+import { FileRow } from "../ui/file-row";
 import { Panel } from "../ui/panel";
 import { TakeButton } from "../ui/take-button";
-import { partsOf } from "./parts";
+import { saveFile } from "./downloads";
+import { partsOf, worthTaking } from "./parts";
 import { DeadEnd } from "./shell";
 
 /*
@@ -29,24 +32,73 @@ import { DeadEnd } from "./shell";
  * up underneath it. At a desk it is the panel's last row instead, where it acts on the
  * rows above and reads as their sum.
  *
- * The whole idea stands or falls on the confirmation, which is why the bar says where
- * what it took went, in plain words, afterwards. Silence would be the version of this
- * idea that fails.
+ * One press, two destinations: the text to the clipboard and the files to the
+ * downloads, in the same gesture, because the recipient does not care which container
+ * a thing travels in. The whole idea stands or falls on the confirmation, which is why
+ * the bar names both halves and says where each went afterwards. Silence would be the
+ * version of this idea that fails, and so would one sentence covering two places.
+ *
+ * A known cost, accepted: a press that fires a download and a clipboard write at once
+ * is the shape browsers are most suspicious of, and some hold the download behind a
+ * permission strip while the copy goes through. Which is why the button stays
+ * pressable after it is done.
  */
 
 async function toClipboard(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
 }
 
-/** What the bar is about to take, or took, named in parts so nothing is a surprise. */
-function named(secret: OpenedEnvelope): { taken: string; takes: string } {
+/** What the bar takes from the rows that go to a clipboard, if it takes anything. */
+function textNamed(
+  secret: OpenedEnvelope
+): { taken: string; takes: string } | null {
   if (secret.note !== undefined && secret.credentials) {
     return { taken: "Note and login copied", takes: "the note and the login" };
   }
+  if (secret.credentials) {
+    return { taken: "Login copied", takes: "the login" };
+  }
 
-  return secret.credentials
-    ? { taken: "Login copied", takes: "the login" }
+  return secret.note === undefined
+    ? null
     : { taken: "Note copied", takes: "the note" };
+}
+
+/** One file by its name, several by their count: three filenames is a list, not a
+ * sentence, and the rows above already say which three. */
+function filesNamed(files: readonly OpenedFile[]): string {
+  const [only] = files;
+
+  return files.length === 1 && only ? only.name : `${files.length} files`;
+}
+
+/**
+ * What the bar is about to do, or did, named in halves so nothing is a surprise
+ * and nothing is claimed twice.
+ */
+function barSays(secret: OpenedEnvelope, taken: boolean): string {
+  const text = textNamed(secret);
+  const files = secret.files.length > 0 ? filesNamed(secret.files) : null;
+
+  if (text && files) {
+    return taken
+      ? `${text.taken}. ${files} saved to your downloads.`
+      : `One press: ${text.takes} to your clipboard, ${files} to your downloads.`;
+  }
+  if (files) {
+    return taken
+      ? `${files} saved to your downloads.`
+      : `One press saves ${files} to your downloads.`;
+  }
+  if (text) {
+    return taken
+      ? `${text.taken} to your clipboard.`
+      : `One press puts ${text.takes} on your clipboard.`;
+  }
+
+  /* Unreachable: the bar is only offered over two things or more, so at least one
+   * half of it is here. Saying nothing about nothing is the right thing to say. */
+  return "";
 }
 
 export function TakeBar({
@@ -59,20 +111,19 @@ export function TakeBar({
   taken: boolean;
 }) {
   const atDesk = useAtDesk();
-  const words = named(secret);
 
   return (
     <>
       <p className="font-sans text-ink-muted text-small">
-        {taken
-          ? `${words.taken} to your clipboard.`
-          : `One press puts ${words.takes} on your clipboard.`}
+        {barSays(secret, taken)}
       </p>
       <TakeButton
         className="w-full md:w-auto"
         done={taken}
         doneLabel="Taken"
-        icon="copy"
+        /* The glyph is the half that needs a container: a download is somewhere to
+         * put a thing, a copy is not, so a press that does both is a download. */
+        icon={secret.files.length > 0 ? "download" : "copy"}
         label="Take everything"
         onTake={onTake}
         size={atDesk ? "md" : "touch"}
@@ -130,7 +181,32 @@ export function Opened({
           />
         ))}
 
-        {parts.length > 1 ? (
+        {/* Last, in the order the envelope numbers them, and on the same line
+         * grammar as the rows above: a secret made of a note plus a login plus a
+         * file still reads as one thing with parts. Per-row Download is how
+         * somebody takes only the file, exactly as per-row Copy is how they take
+         * only the password. */}
+        {secret.files.map((file, index) => (
+          <FileRow
+            actionIcon="download"
+            actionLabel="Download"
+            className={cn(
+              (parts.length > 0 || index > 0) && "border-hairline border-t"
+            )}
+            density={atDesk ? "default" : "touch"}
+            /* The position is the attachment's identity: it is what binds each
+             * ciphertext to its place, two files may share a name, and this list
+             * is fixed the moment the envelope opens. */
+            // biome-ignore lint/suspicious/noArrayIndexKey: the index is the identity
+            key={index}
+            layout={atDesk ? "row" : "stacked"}
+            meta={spokenSize(file.size)}
+            name={file.name}
+            onAction={() => saveFile(file)}
+          />
+        ))}
+
+        {worthTaking(secret) ? (
           <div className="hidden items-center justify-between gap-4 border-hairline border-t bg-surface-sunken px-5 py-4 md:flex">
             <TakeBar onTake={onTake} secret={secret} taken={taken} />
           </div>
