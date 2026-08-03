@@ -92,14 +92,18 @@ Four seams, and no component-test layer:
    both Node 22 and a browser runtime. `pnpm test` runs them in both. A test
    named `*.node.test.ts` is one that reads the repo itself, so it runs in Node
    only; everything else has to pass in the browser too.
-3. **The browser's side of the wire.** `apps/web/src/compose` turns plaintext
-   into a request, a link and a line in this device's memory, and it is the only
+3. **The browser's side of the wire.** Three folders, and between them the only
    place the zero-knowledge rule can be asserted at all: the api cannot check
-   that a key stayed out of a request, because a fragment never reaches it. So
-   this seam is driven at its own boundary with a fake instance and a fake store
-   on the other side. That is the one exception to real integrations over mocks,
-   it is granted for the rule in Non-negotiable 1 and nothing else, and it is not
-   a licence to test a component.
+   that a key stayed out of a request, because a fragment never reaches it.
+   `apps/web/src/compose` turns plaintext into a request, a link and a line in
+   this device's memory. `apps/web/src/reveal` turns a link back into plaintext,
+   and takes the key out of the address bar on the way past. `apps/web/src/watch`
+   asks what became of what this device sent, and has to hand the management
+   token to exactly one route and to no other. Each is driven at its own boundary
+   with a fake instance and a fake store on the other side. That is the one
+   exception to real integrations over mocks, it is granted for the rule in
+   Non-negotiable 1 and nothing else, and it is not a licence to test a
+   component.
 4. **One thin Playwright smoke** over the built container, covering only what
    genuinely needs a browser: fragment handling, clipboard, downloads.
 
