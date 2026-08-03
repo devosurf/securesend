@@ -30,7 +30,7 @@ export function bytesToBase64url(input: Uint8Array): string {
  * produced. The messages never quote the input: this decoder reads the
  * fragment token, and the key must not reach a log or an error report.
  */
-export function base64urlToBytes(input: string): Uint8Array {
+export function base64urlToBytes(input: string): Uint8Array<ArrayBuffer> {
   // A base64url block is 2, 3 or 4 characters. One leftover character is junk.
   if (input.length % 4 === 1) {
     throw new Error("not base64url: incomplete");
