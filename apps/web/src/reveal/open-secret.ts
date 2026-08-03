@@ -8,6 +8,7 @@ import {
   type FragmentToken,
 } from "@securesend/crypto/fragment";
 import { apiClient, type ClientOptions } from "../api/client";
+import { readAnswer, type SecretState, type SecretTimes } from "../api/status";
 
 /*
  * The recipient's whole crossing, from a link to plaintext.
@@ -40,9 +41,6 @@ import { apiClient, type ClientOptions } from "../api/client";
 const OK = 200;
 const NOT_FOUND = 404;
 
-/** The four the instance can report. The other two this browser worked out itself. */
-const REPORTED = ["sealed", "used", "burned", "expired"] as const;
-
 /**
  * This tab's address, which is the only place the key ever is.
  *
@@ -59,18 +57,9 @@ export interface Address {
 }
 
 /** What the instance said, or what this browser found out instead. */
-export type ArrivalState =
-  | (typeof REPORTED)[number]
-  | "missing"
-  | "unreachable";
+export type ArrivalState = SecretState | "missing" | "unreachable";
 
-/** Timestamps, ISO, exactly as the instance recorded them. */
-export interface Answered {
-  burnedAt: string | null;
-  createdAt: string;
-  expiresAt: string;
-  usedAt: string | null;
-}
+export type Answered = SecretTimes;
 
 export interface Arrival {
   /** Absent for the two states the instance never answered at all. */
@@ -90,10 +79,6 @@ export type Unsealed =
   | { status: "open"; secret: OpenedEnvelope }
   /** A wrong password, or a key that did not survive the trip. No request made. */
   | { status: "closed" };
-
-interface Reported extends Answered {
-  state: string;
-}
 
 function thisTab(): Address {
   const { hash, pathname, search } = window.location;
@@ -123,28 +108,17 @@ export function takeKey(from: Address = thisTab()) {
   return decodeFragmentToken(encoded);
 }
 
-/* An answer this browser cannot read is not a dead secret. A state it has never
- * heard of means a newer instance, which is a thing to say nothing about rather
- * than a thing to word a tombstone from. */
-function arrivalOf(answer: Reported): Arrival {
-  const { state, ...answered } = answer;
-  const known = REPORTED.find((name) => name === state);
-
-  return { answered, state: known ?? "unreachable" };
-}
-
-function isReported(value: unknown): value is Reported {
-  if (typeof value !== "object" || value === null) {
-    return false;
+/* An answer this browser cannot read is not a dead secret, so it reads as nothing
+ * having answered rather than as a link that died. */
+function arrivalOf(said: unknown): Arrival {
+  const answer = readAnswer(said);
+  if (!answer) {
+    return { state: "unreachable" };
   }
 
-  const { createdAt, expiresAt, state } = value as Record<string, unknown>;
+  const { id, state, ...answered } = answer;
 
-  return (
-    typeof state === "string" &&
-    typeof createdAt === "string" &&
-    typeof expiresAt === "string"
-  );
+  return { answered, state };
 }
 
 /**
@@ -175,9 +149,7 @@ export async function lookUp(
 
   const said: unknown = await response.json().catch(() => null);
 
-  return response.status === OK && isReported(said)
-    ? arrivalOf(said)
-    : { state: "unreachable" };
+  return response.status === OK ? arrivalOf(said) : { state: "unreachable" };
 }
 
 /**
@@ -213,10 +185,12 @@ export async function spend(
       : { status: "unreachable" };
   }
 
-  /* A spent link comes back in the same shape the lookup returns, which is what
-   * keeps the recipient's dead ends worded off one shape rather than two. */
-  return isReported(said)
-    ? { arrival: arrivalOf(said), status: "gone" }
+  /* A spent link comes back in the same shape the lookup returns, which is what keeps
+   * the recipient's dead ends worded off one shape rather than two. */
+  const arrival = arrivalOf(said);
+
+  return arrival.answered
+    ? { arrival, status: "gone" }
     : { status: "unreachable" };
 }
 

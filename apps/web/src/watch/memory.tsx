@@ -38,10 +38,21 @@ const ONLY_THIS_BROWSER =
 
 const QUIET = "font-sans text-ink-faint text-small";
 
+/*
+ * The device's memory in a sentence, not a readout, and it leads with the news.
+ *
+ * It ignores the burned rows and the expired ones, because a dead secret is not news and
+ * a number beside it is noise about nothing. When nothing is sealed either, the sentence
+ * drops that half rather than saying "0 still sealed", which is a readout of an absence.
+ */
 function summary(used: number, sealed: number): string {
-  const rest = `${sealed === 1 ? "1 still sealed" : `${sealed} still sealed`}, from this browser`;
+  const still = `${sealed} still sealed, from this browser`;
 
-  return used === 0 ? rest : `${used} used, ${rest}`;
+  if (sealed === 0) {
+    return `${used} used, from this browser`;
+  }
+
+  return used === 0 ? still : `${used} used, ${still}`;
 }
 
 /*
@@ -58,14 +69,14 @@ function follow(node: HTMLElement | null) {
     return;
   }
 
-  const until = performance.now() + SETTLE_MS + 120;
+  const growing = performance.now() + SETTLE_MS + 120;
 
   const step = () => {
     const over = node.getBoundingClientRect().bottom - window.innerHeight + 24;
     if (over > 0) {
       window.scrollBy(0, over);
     }
-    if (performance.now() < until) {
+    if (performance.now() < growing) {
       requestAnimationFrame(step);
     }
   };
@@ -142,8 +153,8 @@ export function DeviceMemory() {
    */
   useEffect(() => {
     refresh().catch(() => {
-      // Nothing to report: statusesOf answers with an empty list rather than
-      // throwing, so the rows on screen simply stay as they are.
+      // Nothing to report: a lookup that did not land answers rather than throwing,
+      // and the rows on screen stay as they are.
     });
   }, [refresh]);
 

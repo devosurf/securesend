@@ -1,4 +1,5 @@
 import { apiClient, type ClientOptions } from "../api/client";
+import { readAnswer, type SecretAnswer, type SecretState } from "../api/status";
 import type { SentSecret } from "../compose/remember";
 import { since, until } from "../lib/timing";
 
@@ -28,8 +29,8 @@ const OK = 200;
 const NOT_FOUND = 404;
 const SCHEME = /^https?:\/\//;
 
-/** The four a secret can be in, and the words for each. */
-export type Kind = "sealed" | "used" | "burned" | "expired";
+/** The four a secret can be in. The words for each are further down. */
+export type Kind = SecretState;
 
 export interface Watched {
   id: string;
@@ -48,31 +49,6 @@ export type Burned =
   /** It did not go through, and nothing was destroyed. */
   | { status: "refused" };
 
-interface Answer {
-  burnedAt: string | null;
-  createdAt: string;
-  expiresAt: string;
-  id: string;
-  state: string;
-  usedAt: string | null;
-}
-
-const KINDS: readonly Kind[] = ["sealed", "used", "burned", "expired"];
-
-function isAnswer(value: unknown): value is Answer {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
-  const { expiresAt, id, state } = value as Record<string, unknown>;
-
-  return (
-    typeof id === "string" &&
-    typeof state === "string" &&
-    typeof expiresAt === "string"
-  );
-}
-
 /**
  * What a row says beside its badge.
  *
@@ -82,7 +58,9 @@ function isAnswer(value: unknown): value is Answer {
  * used" rather than a time, because the useful fact about an expiry is not when the
  * clock ran out, it is that nobody read what was inside.
  */
-function timingOf(answer: Answer, status: Kind, now: number): string {
+function timingOf(answer: SecretAnswer, now: number): string {
+  const status = answer.state;
+
   if (status === "sealed") {
     return `${until(answer.expiresAt, now)} left`;
   }
@@ -98,22 +76,17 @@ function timingOf(answer: Answer, status: Kind, now: number): string {
   return "never used";
 }
 
-function watchedFrom(
-  answer: Answer,
-  host: string,
-  now: number
-): Watched | null {
-  const status = KINDS.find((kind) => kind === answer.state);
+/* A row is a claim about somebody's secret, so an answer this build cannot read shows
+ * no row rather than a row whose badge is a guess. */
+function watchedFrom(said: unknown, host: string, now: number): Watched | null {
+  const answer = readAnswer(said);
 
-  /* A state this build has never heard of means a newer instance. A row is a claim
-   * about somebody's secret, so the honest thing is to show no row rather than a row
-   * whose badge is a guess. */
-  return status
+  return answer
     ? {
         id: answer.id,
         shown: `${host}/s/${answer.id}`,
-        status,
-        timing: timingOf(answer, status, now),
+        status: answer.state,
+        timing: timingOf(answer, now),
       }
     : null;
 }
@@ -150,12 +123,16 @@ function hostOf(around: ClientOptions): string {
  * Ids the instance has nothing for come back absent, which is what a row a week past its
  * expiry looks like from here. They are simply not shown, and the sentence under the
  * panel says the forgetting is how the product works.
+ *
+ * Null is not an empty list. Nothing answering has to be a different answer from nothing
+ * being there, because a re-check that dropped every row on a dropped connection would
+ * delete a sender's whole history over a bad second of wifi.
  */
 export async function statusesOf(
   remembered: readonly SentSecret[],
   around: ClientOptions = {},
   now = Date.now()
-): Promise<Watched[]> {
+): Promise<Watched[] | null> {
   if (remembered.length === 0) {
     return [];
   }
@@ -167,28 +144,26 @@ export async function statusesOf(
   try {
     response = await ask({ json: { ids: remembered.map((held) => held.id) } });
   } catch {
-    // Nothing answered. The rows the sender is already looking at stay as they are,
-    // which is what the freshness line under them is for.
-    return [];
+    return null;
   }
 
   if (response.status !== OK) {
-    return [];
+    return null;
   }
 
   const said: unknown = await response.json().catch(() => null);
   if (typeof said !== "object" || said === null || !("secrets" in said)) {
-    return [];
+    return null;
   }
 
   const { secrets } = said;
   if (!Array.isArray(secrets)) {
-    return [];
+    return null;
   }
 
-  return secrets
-    .filter(isAnswer)
-    .flatMap((answer) => watchedFrom(answer, host, now) ?? []);
+  return secrets.flatMap(
+    (answer: unknown) => watchedFrom(answer, host, now) ?? []
+  );
 }
 
 /**
@@ -221,10 +196,6 @@ export async function burnOne(
   }
 
   const said: unknown = await response.json().catch(() => null);
-  if (!isAnswer(said)) {
-    return { status: "refused" };
-  }
-
   const watched = watchedFrom(said, hostOf(around), now);
 
   return watched ? { status: "answered", watched } : { status: "refused" };

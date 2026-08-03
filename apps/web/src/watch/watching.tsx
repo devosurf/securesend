@@ -43,8 +43,8 @@ export interface Watching {
   memory: Memory;
   /** The same, with the freshness line saying so while it happens. */
   recheck: () => Promise<void>;
-  /** Re-reads this browser's memory and asks the instance about all of it. */
-  refresh: () => Promise<void>;
+  /** Re-reads this browser's memory and asks about all of it. False if nothing answered. */
+  refresh: () => Promise<boolean>;
   rows: Watched[];
   /** What the instance last said about one id, for a screen watching just one. */
   statusOf: (id: string) => Watched | null;
@@ -70,16 +70,20 @@ export function useWatching(): Watching {
  * these statuses were checked, and a locally guessed "Sealed" that flips to "Used" a
  * moment later would make that line a lie for the length of one request.
  *
- * Past that, `full` is a list with news in it and `forgotten` is a list without. Nothing
- * sealed means nothing can be burned and nothing can change, so there is no summary to
- * collapse behind a control and nothing to re-check.
+ * Past that, `full` is a list with news in it and `forgotten` is a list without. News is
+ * a secret still sealed or one somebody used, because those are the two a sender acts on.
+ * A list of nothing but burns and expiries has no summary worth collapsing behind a
+ * control, nothing left to burn and nothing that can change, which is why that state
+ * shows its rows plainly and offers no re-check.
  */
 function memoryOf(rows: Watched[]): Memory {
   if (rows.length === 0) {
     return "none";
   }
 
-  return rows.some((row) => row.status === "sealed") ? "full" : "forgotten";
+  return rows.some((row) => row.status === "sealed" || row.status === "used")
+    ? "full"
+    : "forgotten";
 }
 
 export function WatchProvider({ children }: { children: ReactNode }) {
@@ -93,16 +97,34 @@ export function WatchProvider({ children }: { children: ReactNode }) {
 
   const keepIt = useRef<HTMLButtonElement>(null);
 
+  /*
+   * Re-reads this browser's memory and asks about all of it. It answers whether the
+   * instance answered, because nothing coming back is not the same as nothing being
+   * there: dropping every row on a bad second of wifi would delete a sender's whole
+   * history and take the panel off the page with it.
+   */
   const refresh = useCallback(async () => {
     const kept = browserMemory();
+    if (!kept) {
+      setRows([]);
+      return true;
+    }
 
-    setRows(kept ? await statusesOf(recall(kept)) : []);
+    const asked = await statusesOf(recall(kept));
+    if (asked === null) {
+      return false;
+    }
+
+    setRows(asked);
+    return true;
   }, []);
 
+  /* A check that did not land leaves the rows and says they are as old as they are.
+   * "Checked a moment ago" over rows nothing confirmed would be the one sentence on
+   * this panel whose whole job is to be exact being the one that lies. */
   const recheck = useCallback(async () => {
     setFreshness("checking");
-    await refresh();
-    setFreshness("fresh");
+    setFreshness((await refresh()) ? "fresh" : "load");
   }, [refresh]);
 
   /* One row in, replacing what was there or joining the front. The receipt's own secret

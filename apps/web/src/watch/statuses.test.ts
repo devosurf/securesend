@@ -87,7 +87,7 @@ async function rowFor(state: string, when?: Record<string, string | null>) {
     Response.json({ secrets: [answer(held.id, state, when)] })
   );
 
-  const [row] = await statusesOf([held], server, NOW);
+  const [row] = (await statusesOf([held], server, NOW)) ?? [];
 
   return { held, row };
 }
@@ -104,7 +104,7 @@ describe("statusesOf", () => {
     const rows = await statusesOf(remembered, server, NOW);
 
     expect(server.asked).toHaveLength(1);
-    expect(rows.map((row) => row.id)).toStrictEqual(
+    expect(rows?.map((row) => row.id)).toStrictEqual(
       remembered.map((held) => held.id)
     );
   });
@@ -195,7 +195,7 @@ describe("statusesOf", () => {
 
     const rows = await statusesOf([forgotten, known], server, NOW);
 
-    expect(rows.map((row) => row.id)).toStrictEqual([known.id]);
+    expect(rows?.map((row) => row.id)).toStrictEqual([known.id]);
   });
 
   it("shows no row for a state this build has never heard of", async () => {
@@ -204,8 +204,26 @@ describe("statusesOf", () => {
     expect(row).toBeUndefined();
   });
 
-  it("leaves the rows alone when nothing answers", async () => {
-    expect(await statusesOf(many(2), offline, NOW)).toStrictEqual([]);
+  /*
+   * Nothing answering is not the same as nothing being there, and this is the whole
+   * reason: the sender's panel is built from what comes back, so an empty list on a
+   * dropped connection would delete their history over a bad second of wifi. Null says
+   * "ask again", an empty list says "you have sent nothing".
+   */
+  it("says nothing answered rather than answering with no rows", async () => {
+    expect(await statusesOf(many(2), offline, NOW)).toBeNull();
+  });
+
+  it("says nothing answered when the instance answers something unreadable", async () => {
+    const server = instance(() => Response.json({ mood: "cryptic" }));
+
+    expect(await statusesOf(many(2), server, NOW)).toBeNull();
+  });
+
+  it("answers with no rows when this browser has sent nothing", async () => {
+    const server = instance(() => Response.json({ secrets: [] }));
+
+    expect(await statusesOf([], server, NOW)).toStrictEqual([]);
   });
 });
 
