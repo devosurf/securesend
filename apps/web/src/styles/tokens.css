@@ -1,0 +1,153 @@
+/*
+ * The single token file. Every colour, size, radius and curve in the product is
+ * named here, and the interface reads names rather than values.
+ *
+ * Dark by default. There is no light theme, and adopting one is not free: the
+ * accent fails AA as text on light grounds and would have to darken.
+ *
+ * @theme blocks generate Tailwind utilities (--color-surface -> bg-surface).
+ * :root holds the primitives plain CSS consumes directly (transitions.css).
+ */
+
+@theme {
+  /* --- surfaces, darkest to lightest ------------------------------------ */
+  --color-bg: #0a0a0a;
+  --color-surface: #111213;
+  --color-surface-raised: #16171a;
+  --color-surface-sunken: #0d0d0e;
+
+  /* --- lines ------------------------------------------------------------- */
+  --color-hairline: #1f1f1f;
+  --color-line-strong: #2a2b2e;
+
+  /* --- ink, brightest to faintest ---------------------------------------- */
+  /* ink-strong is for display type only. Named apart from --text-display so
+	 * the colour utility and the size utility never collide on `text-display`. */
+  --color-ink-strong: #f5f6f4;
+  --color-ink: #f2f2f0;
+  --color-ink-muted: #9a9ca1;
+  --color-ink-faint: #5c5e63;
+  --color-ink-disabled: #4a4b4e;
+
+  /* --- accent ------------------------------------------------------------
+	 * accent-ink is what sits ON a filled accent surface: always near-black,
+	 * never white. White on this teal fails contrast.
+	 */
+  --color-accent: #2dd4bf;
+  --color-accent-hover: #5eead4;
+  --color-accent-ink: #000000;
+
+  /* --- signal ------------------------------------------------------------
+	 * A secret is live, expiring, or gone. One accent cannot say all three
+	 * honestly: if teal means both "ready" and "expired" the system is lying.
+	 * So time gets its own hue, and only time. Amber appears on countdowns and
+	 * expiry, nowhere else. "Gone" is deliberately neutral, not a third hue,
+	 * because finality should read as absence rather than as an alarm.
+	 */
+  --color-warn: #ffb020;
+  --color-warn-ink: #2a1c06;
+
+  /* --- type --------------------------------------------------------------
+	 * Display is Bricolage Grotesque and is the ONLY place it appears.
+	 * Everything else is Inter Tight. Mono is for machine-shaped text.
+	 */
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --text-display: 88px;
+  --text-display--line-height: 0.98;
+  --text-display--letter-spacing: -0.02em;
+  --text-display--font-weight: 700;
+
+  /* The phone step of the same voice. 88px is a desk size: at 390 it breaks
+	 * "disappears." across two lines and eats a third of the screen, so the
+	 * display headline resizes rather than falling back to the heading font.
+	 * Same face, same weight, same tracking; only the size moves. */
+  --text-display-sm: 40px;
+  --text-display-sm--line-height: 1;
+  --text-display-sm--letter-spacing: -0.02em;
+  --text-display-sm--font-weight: 700;
+
+  --text-heading: 30px;
+  --text-heading--line-height: 1.1;
+  --text-heading--letter-spacing: -0.02em;
+  --text-heading--font-weight: 600;
+
+  --text-body: 17px;
+  --text-body--line-height: 1.625;
+  --text-body--font-weight: 400;
+
+  --text-small: 13px;
+  --text-small--line-height: 1.4;
+  --text-small--font-weight: 500;
+
+  --text-meta: 12px;
+  --text-meta--line-height: 1.4;
+  --text-meta--font-weight: 400;
+
+  /* --- radius ------------------------------------------------------------
+	 * 4px everywhere, 3px for a control nested inside a control. At this scale
+	 * radius is not load-bearing, so it stays tight and consistent rather than
+	 * expressive.
+	 */
+  --radius-control: 4px;
+  --radius-inner: 3px;
+
+  /* --- motion ------------------------------------------------------------
+	 * Interface motion is fast and unshowy. Screen-to-screen moves live in
+	 * transitions.css.
+	 */
+  --ease-out-quick: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in-out-soft: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:root {
+  /* Durations, named by what they are for. Plain CSS reads these directly. */
+  --duration-instant: 90ms; /* hover, press, colour flips */
+  --duration-quick: 150ms; /* focus rings, borders, small state changes */
+  --duration-settle: 260ms; /* things arriving or leaving in place */
+  --duration-walk: 320ms; /* screen-to-screen */
+
+  /* The accent focus ring, used identically by every focusable surface. */
+  --ring-accent: 0 0 0 3px rgb(45 212 191 / 0.14);
+
+  /* The one piece of atmosphere in the system: a wide, very low teal wash
+	 * behind display type. Under 7% so it reads as depth, not as a gradient. */
+  --wash-accent: radial-gradient(
+    ellipse 1000px 480px at 50% 30%,
+    rgb(45 212 191 / 0.06),
+    transparent 60%
+  );
+
+  /* --- elevation ---------------------------------------------------------
+	 * There are no drop shadows in this product, so a surface that floats above
+	 * the page has to say so some other way. It says so with an edge: a
+	 * line-strong border plus a 1px near-black ring outside it, so the light
+	 * edge reads as the top of an object rather than as a line drawn on the
+	 * page. It is the only treatment that works for a modal and for a small
+	 * anchored menu, and it is the trick Panel already plays for focus, run
+	 * neutral instead of teal.
+	 *
+	 * Three alternatives were built and lost. A new surface value above
+	 * surface-raised does not compose: the ladder runs out the first time
+	 * something floats over the floating thing. Translucency plus a backdrop
+	 * blur leaks whatever is behind it, which in this product is the accent and
+	 * the sender's own pasted secret, and a see-through "are you sure" shows the
+	 * sender the very thing it is asking them to destroy. A near-black wash over
+	 * the page survived, but not as elevation: it is what MODALITY looks like. A
+	 * dialog wears it because it takes the page hostage. A menu must never.
+	 *
+	 * The float-* variables are the whole contract, and the floating primitive
+	 * reads them and nothing else, so revisiting this is a token edit rather
+	 * than a component rewrite. They live in :root and not in @theme because
+	 * they are consumed as var() by that primitive, never as utilities.
+	 */
+  --ring-void: 0 0 0 1px #000000; /* the halo. 0 blur, so a ring. */
+  --scrim-void: rgb(4 4 5 / 0.62); /* modality: the page, out of play. */
+
+  --float-surface: var(--color-surface);
+  --float-border: var(--color-line-strong);
+  --float-ring: var(--ring-void);
+  --float-scrim: var(--scrim-void);
+}

@@ -1,0 +1,13 @@
+@import "tailwindcss";
+@import "./fonts.css";
+@import "./tokens.css";
+@import "./transitions.css";
+
+html {
+  color-scheme: dark;
+  background-color: var(--color-bg);
+}
+
+body {
+  font-family: var(--font-sans);
+}

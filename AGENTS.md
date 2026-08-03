@@ -24,6 +24,11 @@ a setting, a mode, or a screen, the default answer is no.
    It must deploy as one container.
 5. **Self-hosting stays uncrippled.** The core action is never paywalled and
    self-hosters keep their own branding for free.
+6. **Nothing third-party, nothing inline.** No script, font, style or image may
+   come from another origin, because zero third-party requests is a claim the
+   security page invites a reader to check in a network panel. The content
+   security policy is self only, with no `unsafe-inline`, so the interface also
+   carries no inline `style` attribute: a dynamic value is a class.
 
 ## Stack
 
@@ -39,7 +44,13 @@ compatibility shims.
 pnpm workspace, three packages:
 
 - `apps/web`. Vite + React SPA, TanStack Router file-based routes. The generated
-  `src/routeTree.gen.ts` is committed.
+  `src/routeTree.gen.ts` is committed. It carries the design system: `src/styles`
+  holds the tokens, the motion vocabulary and the self-hosted fonts, `src/ui` is
+  the component kit, `src/lib` holds `cn`, `PhaseSwap` and every outbound
+  destination. Build the interface from those, never from raw hex or a rebuilt
+  control. `/` and `/security` are rendered to HTML at build time by a second
+  pass over `src/prerender.tsx`; every other route is client-rendered and gets
+  an empty shell.
 - `apps/api`. Hono. Owns the Drizzle schema and the migrations. In production it
   serves the web build from `./public` in the same process.
 - `packages/crypto`. Consumed as TypeScript source inside the workspace, since
@@ -86,3 +97,9 @@ Three seams, and no component-test layer:
 
 A good test exercises external behavior at a public boundary and would survive
 a rewrite of everything behind it.
+
+Beside the three seams there is the **claims audit**, which is not a behaviour
+test but a check that the product's public claims stay true: the banned words are
+absent, the required headers are present, and nothing the pages load comes from
+another origin. Some of it lives in `apps/web/src/third-party.node.test.ts` and
+in the api's header tests; the rest belongs in CI.

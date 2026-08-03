@@ -1,0 +1,170 @@
+/*
+ * The motion vocabulary, at both of its scales.
+ *
+ * The rule: motion explains where something went, it never decorates. A move
+ * that does not answer "where did that go" or "what just changed" should not
+ * exist. Durations come from tokens.css so interface motion and screen motion
+ * stay in the same family.
+ *
+ * ---- two scales, one vocabulary ------------------------------------------
+ *
+ * This file has two halves and they say the same four things.
+ *
+ * The walk half styles View Transitions, which the router runs when a link
+ * moves between routes. The in-place half is the same moves as ordinary CSS
+ * classes, for a state change inside one screen: the reveal, sealed to open, is
+ * a state change rather than a navigation, and it still has to keep its 520ms
+ * uncover. A move must not mean one thing between screens and another inside
+ * one, so both halves share the keyframes, the durations and the curves.
+ *
+ * A navigation names its move as a View Transition *type*, which is what
+ * :active-view-transition-type() selects on. A navigation that names nothing
+ * gets the crossfade below, because most walks are not a story.
+ */
+
+/* --- default walk -------------------------------------------------------- */
+::view-transition-old(root) {
+  animation: ss-fade-out var(--duration-walk) var(--ease-in-out-soft, ease) both;
+}
+
+::view-transition-new(root) {
+  animation: ss-fade-in var(--duration-walk) var(--ease-in-out-soft, ease) both;
+}
+
+/* --- advance -------------------------------------------------------------
+ * Moving forward through the one job: create -> link, link -> reveal.
+ * The outgoing screen recedes slightly, the incoming one arrives from below.
+ * Small distances only. This is a step, not a slide show.
+ */
+html:active-view-transition-type(advance)::view-transition-old(root) {
+  animation: ss-recede var(--duration-walk) var(--ease-out-quick, ease) both;
+}
+
+html:active-view-transition-type(advance)::view-transition-new(root) {
+  animation: ss-arrive var(--duration-walk) var(--ease-out-quick, ease) both;
+}
+
+/* --- reveal --------------------------------------------------------------
+ * The one moment in the product that earns real motion: a secret being
+ * uncovered, once, for the only time it will ever be readable. Slower than
+ * everything else on purpose. It should feel deliberate, like something is
+ * being handed over, never like a magic trick.
+ */
+html:active-view-transition-type(reveal)::view-transition-old(root) {
+  animation: ss-fade-out var(--duration-settle) var(--ease-out-quick, ease) both;
+}
+
+html:active-view-transition-type(reveal)::view-transition-new(root) {
+  animation: ss-uncover 520ms var(--ease-out-quick, ease) both;
+}
+
+/* --- burn ----------------------------------------------------------------
+ * The secret is gone and is not coming back. The outgoing screen leaves
+ * without being replaced by anything eager: the incoming state waits, then
+ * settles in quietly. Finality reads as stillness, not as an explosion.
+ */
+html:active-view-transition-type(burn)::view-transition-old(root) {
+  animation: ss-dissolve var(--duration-settle) var(--ease-in-out-soft, ease)
+    both;
+}
+
+html:active-view-transition-type(burn)::view-transition-new(root) {
+  animation: ss-fade-in var(--duration-settle) var(--ease-in-out-soft, ease)
+    both;
+  animation-delay: 120ms;
+}
+
+/* --- the same moves, in place --------------------------------------------
+ * For a state change inside one screen, which has no navigation to hang on.
+ * These are the walk rules with the walk taken out.
+ *
+ * Pair them the way the walks pair: the thing leaving wears -out, the thing
+ * arriving wears -in, and they are mounted in one grid cell so neither can move
+ * the other. PhaseSwap is the mechanism that plays them.
+ */
+.ss-advance-in {
+  animation: ss-arrive var(--duration-walk) var(--ease-out-quick, ease) both;
+}
+
+.ss-advance-out {
+  animation: ss-recede var(--duration-walk) var(--ease-out-quick, ease) both;
+}
+
+/* The one slow moment. 520ms, the same clip-path uncover the walk plays. */
+.ss-reveal-in {
+  animation: ss-uncover 520ms var(--ease-out-quick, ease) both;
+}
+
+.ss-burn-out {
+  animation: ss-dissolve var(--duration-settle) var(--ease-in-out-soft, ease)
+    both;
+}
+
+.ss-burn-in {
+  animation: ss-fade-in var(--duration-settle) var(--ease-in-out-soft, ease)
+    both;
+  animation-delay: 120ms;
+}
+
+@keyframes ss-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes ss-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes ss-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes ss-recede {
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes ss-uncover {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes ss-dissolve {
+  to {
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+
+/* Under reduced motion every walk collapses to a plain, short crossfade, and
+ * the in-place moves stop moving with it. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+  }
+
+  .ss-advance-in,
+  .ss-advance-out,
+  .ss-reveal-in,
+  .ss-burn-out,
+  .ss-burn-in {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+  }
+}
