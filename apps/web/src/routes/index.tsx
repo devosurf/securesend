@@ -1,9 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { PhoneBar } from "../compose/bar";
+import { ComposeProvider, useComposing } from "../compose/composing";
+import { Envelope } from "../compose/envelope";
+import { Receipt } from "../compose/receipt";
 import { LINKS, OUTBOUND } from "../lib/links";
+import { PhaseSwap } from "../lib/motion";
 import { RouteLink } from "../lib/route-link";
 import { cn } from "../lib/utils";
 import { buttonVariants } from "../ui/button";
+import { Collapse } from "../ui/collapse";
 import { Icon } from "../ui/icon";
 import { TextLink } from "../ui/text-link";
 import { Wordmark } from "../ui/wordmark";
@@ -14,9 +20,21 @@ import { Wordmark } from "../ui/wordmark";
  * The create page is the homepage. That is the product's single most important
  * structural decision and everything here follows from it: the first thing a
  * stranger sees is the thing they came to use, and the ten seconds they spend on
- * it is the entire product. The composer itself, and the sender's device memory
- * under it, arrive with the seal-and-send work. What is here is everything around
- * them: the header, the page under the fold, and the footer.
+ * it is the entire product. The sender's device memory, under the envelope, arrives
+ * with the reveal work.
+ *
+ * ==== three bands on a phone, one document at a desk =======================
+ *
+ * At a desk this page is ordinary flow: a header, a fold, three sections, a footer,
+ * scrolled by the document. On a phone it is a header, a scrolling region, and a
+ * bar, because the composer's action and affordances have to sit above the keyboard
+ * rather than under it. The bar is a flex sibling of the scroll region rather than
+ * an overlay, so nothing it does can cover a control it was meant to help.
+ *
+ * Both arrangements are the same elements: the outer box is a fixed-height column
+ * below the desk width and a plain block at it, and the scroll region stops
+ * generating a box entirely, so the fold, the sections and the footer are back in
+ * the document's own flow.
  *
  * ==== the below-fold ======================================================
  *
@@ -328,15 +346,72 @@ function AbuseMailLink() {
   );
 }
 
+/*
+ * The fold: the header the whole product wears, and the envelope under it.
+ *
+ * The 760px floor is what lets every part a sender adds grow downward into room that
+ * was already there, so nothing above the new part ever moves. On a phone that room
+ * does not exist, so the introduction hands over its own height instead: it explains
+ * the screen to somebody who has not begun, and the moment the caret lands they have
+ * begun. A latch, never a toggle, because a header that bounces as you tab through a
+ * form is worse than either state.
+ *
+ * The receipt takes the fold whole rather than arriving under the envelope. It is the
+ * same job one step on, so it is an advance, which is the move the router plays
+ * between pages and PhaseSwap plays inside one.
+ */
+function Fold() {
+  const { stage, started } = useComposing();
+
+  const compose = (
+    <div className="flex flex-col items-center">
+      <Collapse className="w-full" enter={false} open={!started}>
+        <div className="mx-auto max-w-[760px] pb-8 text-center md:pb-0">
+          <h1 className="text-balance font-display text-display-sm text-ink-strong md:text-display">
+            Send a secret
+            <br />
+            that <span className="text-accent">disappears.</span>
+          </h1>
+          <p className="mx-auto mt-4 max-w-[480px] font-sans text-body text-ink-muted md:mt-7">
+            Type it, paste it, or <OnPhone>add a file.</OnPhone>
+            <AtDesk>
+              drop a file in. It's locked in this browser before it goes
+              anywhere.
+            </AtDesk>
+          </p>
+        </div>
+      </Collapse>
+
+      <Envelope />
+    </div>
+  );
+
+  return (
+    <div className="px-5 pt-8 md:min-h-[760px] md:px-6 md:pt-[84px]">
+      <PhaseSwap move="advance" phase={stage}>
+        {stage === "compose" ? compose : <Receipt />}
+      </PhaseSwap>
+    </div>
+  );
+}
+
 function Home() {
   return (
-    <div className="relative">
+    <ComposeProvider>
+      <Page />
+    </ComposeProvider>
+  );
+}
+
+function Page() {
+  return (
+    <div className="relative flex h-dvh flex-col overflow-hidden md:block md:h-auto md:overflow-visible">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 h-dvh [background:var(--wash-accent)] md:h-[900px]"
       />
 
-      <nav className="relative flex items-center justify-between px-5 pt-7 md:px-16 md:pt-10">
+      <nav className="relative flex shrink-0 items-center justify-between px-5 pt-7 md:px-16 md:pt-10">
         <Wordmark />
         <div className="flex items-center gap-8">
           <RouteLink
@@ -359,196 +434,176 @@ function Home() {
         </div>
       </nav>
 
-      <main className="relative">
-        {/* The header the whole product wears, down to the line break and the
-         * accented word. Only the line under it is local: it tells you what you
-         * can put in the box that lands here next.
-         *
-         * The composer goes under this header, and the fold gets its designed
-         * floor of 760px back when it does. The floor exists so that every part a
-         * sender adds grows downward into room that was already there and nothing
-         * above it ever moves, which is a promise about the composer. Reserving
-         * that height around a headline and nothing else would just be a screen
-         * of empty. */}
-        <div className="flex flex-col items-center px-5 pt-9 pb-1 md:px-6 md:pt-[84px] md:pb-0">
-          <div className="w-full max-w-[760px] text-center">
-            <h1 className="text-balance font-display text-display-sm text-ink-strong md:text-display">
-              Send a secret
-              <br />
-              that <span className="text-accent">disappears.</span>
-            </h1>
-            <p className="mx-auto mt-4 max-w-[480px] font-sans text-body text-ink-muted md:mt-7">
-              Type it, paste it, or <OnPhone>add a file.</OnPhone>
-              <AtDesk>
-                drop a file in. It's locked in this browser before it goes
-                anywhere.
-              </AtDesk>
-            </p>
-          </div>
-        </div>
+      {/* The scroll region on a phone, and no box at all at a desk. */}
+      <div className="min-h-0 flex-1 overflow-y-auto md:contents">
+        <main className="relative">
+          <Fold />
 
-        {/* ---- how it works ------------------------------------------------
-         * The mechanism is the pitch. Anyone can say "secure"; the only thing
-         * that separates this from a pastebin is what happens to the key, so that
-         * is what the three steps are about. */}
-        <section className="mt-16 border-hairline border-t px-5 pt-10 md:mt-24 md:px-16 md:py-20">
-          <div className="mx-auto max-w-[1000px]">
-            <h2 className="max-w-[560px] text-balance font-sans text-heading text-ink-strong">
-              The key never reaches us. That's the whole design.
-            </h2>
+          {/* ---- how it works ------------------------------------------------
+           * The mechanism is the pitch. Anyone can say "secure"; the only thing
+           * that separates this from a pastebin is what happens to the key, so that
+           * is what the three steps are about. */}
+          <section className="mt-16 border-hairline border-t px-5 pt-10 md:mt-24 md:px-16 md:py-20">
+            <div className="mx-auto max-w-[1000px]">
+              <h2 className="max-w-[560px] text-balance font-sans text-heading text-ink-strong">
+                The key never reaches us. That's the whole design.
+              </h2>
 
-            <div className="mt-8 flex flex-col gap-6 md:mt-12 md:flex-row md:gap-10">
-              {STEPS.map((step) => (
-                <Step
-                  heading={step.heading}
-                  index={step.index}
-                  key={step.index}
+              <div className="mt-8 flex flex-col gap-6 md:mt-12 md:flex-row md:gap-10">
+                {STEPS.map((step) => (
+                  <Step
+                    heading={step.heading}
+                    index={step.index}
+                    key={step.index}
+                  >
+                    {step.body}
+                  </Step>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ---- what we hold -------------------------------------------------
+           * Two lists and the caveat. A label like end-to-end may only appear
+           * within sight of the sentence admitting that whoever holds the whole
+           * link can open the secret, so the two are in the same paragraph, and the
+           * label appears exactly once on this page. */}
+          <section className="mt-12 border-hairline border-t px-5 pt-10 md:mt-0 md:px-16 md:py-20">
+            <div className="mx-auto max-w-[1000px]">
+              <h2 className="font-sans text-heading text-ink-strong">
+                What sits on our server
+              </h2>
+
+              <div className="mt-7 flex flex-col gap-8 md:mt-10 md:flex-row md:gap-16">
+                <Holds
+                  heading="Kept until it's used or expires"
+                  items={KEPT}
+                  tone="kept"
+                />
+                <Holds
+                  heading="Never stored, never logged"
+                  items={NEVER}
+                  tone="never"
+                />
+              </div>
+
+              <p className="mt-8 max-w-[620px] font-sans text-body text-ink-muted md:mt-12">
+                That is what end-to-end encrypted means here, and it comes with
+                one honest caveat:{" "}
+                <span className="text-ink">
+                  anyone holding the whole link can open the secret
+                </span>
+                . The link is the key.
+                <AtDesk>
+                  {" "}
+                  Treat it like the password it carries, and send a password
+                  separately if it matters.
+                </AtDesk>
+              </p>
+            </div>
+          </section>
+
+          {/* ---- what we don't say --------------------------------------------
+           * A product whose pitch is "trust the mechanism" cannot be vague about
+           * its limits. Every line here is a claim we are choosing not to make, and
+           * the section stays until each one stops being true. */}
+          <section className="mt-12 border-hairline border-t px-5 pt-10 md:mt-0 md:px-16 md:py-20">
+            <div className="mx-auto max-w-[1000px]">
+              <h2 className="font-sans text-heading text-ink-strong">
+                What we're not claiming
+              </h2>
+
+              <div className="mt-7 grid max-w-[860px] gap-5 md:mt-10 md:grid-cols-2 md:gap-x-16 md:gap-y-7">
+                {CLAIMS.map((claim) => (
+                  <p
+                    className="font-sans text-ink-muted text-small"
+                    key={claim.id}
+                  >
+                    <span className="text-ink">{claim.lead}</span> {claim.body}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </section>
+        </main>
+
+        {/* ---- the footer, and the repository ------------------------------- */}
+        <footer
+          className="mt-12 border-hairline border-t px-5 pt-10 pb-10 md:mt-0 md:px-16 md:py-16"
+          id="self-host"
+        >
+          <div className="mx-auto max-w-[1000px] md:flex md:items-end md:justify-between md:gap-10">
+            <div className="md:max-w-[420px]">
+              <Wordmark />
+              <p className="mt-4 font-sans text-body text-ink-muted md:mt-5">
+                Open source under AGPLv3. Run it yourself in one container, with
+                your own branding, for nothing.
+                <AtDesk> It's the same image our own instance runs.</AtDesk>
+              </p>
+              {/* An anchor wearing the button, not a button that navigates. The
+               * look is shared through buttonVariants precisely so a destination
+               * never has to pretend to be a control. */}
+              <div className="mt-6 hidden items-center gap-5 md:flex">
+                <a
+                  className={cn(
+                    buttonVariants({ size: "sm", variant: "secondary" }),
+                    "gap-2"
+                  )}
+                  href={LINKS.source}
+                  {...OUTBOUND}
                 >
-                  {step.body}
-                </Step>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ---- what we hold -------------------------------------------------
-         * Two lists and the caveat. A label like end-to-end may only appear
-         * within sight of the sentence admitting that whoever holds the whole
-         * link can open the secret, so the two are in the same paragraph, and the
-         * label appears exactly once on this page. */}
-        <section className="mt-12 border-hairline border-t px-5 pt-10 md:mt-0 md:px-16 md:py-20">
-          <div className="mx-auto max-w-[1000px]">
-            <h2 className="font-sans text-heading text-ink-strong">
-              What sits on our server
-            </h2>
-
-            <div className="mt-7 flex flex-col gap-8 md:mt-10 md:flex-row md:gap-16">
-              <Holds
-                heading="Kept until it's used or expires"
-                items={KEPT}
-                tone="kept"
-              />
-              <Holds
-                heading="Never stored, never logged"
-                items={NEVER}
-                tone="never"
-              />
+                  Read the source
+                  <Icon name="arrow-right" size={13} />
+                </a>
+                <SelfHostingLink />
+              </div>
             </div>
 
-            <p className="mt-8 max-w-[620px] font-sans text-body text-ink-muted md:mt-12">
-              That is what end-to-end encrypted means here, and it comes with
-              one honest caveat:{" "}
-              <span className="text-ink">
-                anyone holding the whole link can open the secret
-              </span>
-              . The link is the key.
-              <AtDesk>
-                {" "}
-                Treat it like the password it carries, and send a password
-                separately if it matters.
-              </AtDesk>
-            </p>
-          </div>
-        </section>
-
-        {/* ---- what we don't say --------------------------------------------
-         * A product whose pitch is "trust the mechanism" cannot be vague about
-         * its limits. Every line here is a claim we are choosing not to make, and
-         * the section stays until each one stops being true. */}
-        <section className="mt-12 border-hairline border-t px-5 pt-10 md:mt-0 md:px-16 md:py-20">
-          <div className="mx-auto max-w-[1000px]">
-            <h2 className="font-sans text-heading text-ink-strong">
-              What we're not claiming
-            </h2>
-
-            <div className="mt-7 grid max-w-[860px] gap-5 md:mt-10 md:grid-cols-2 md:gap-x-16 md:gap-y-7">
-              {CLAIMS.map((claim) => (
-                <p
-                  className="font-sans text-ink-muted text-small"
-                  key={claim.id}
-                >
-                  <span className="text-ink">{claim.lead}</span> {claim.body}
-                </p>
-              ))}
-            </div>
-          </div>
-        </section>
-      </main>
-
-      {/* ---- the footer, and the repository ------------------------------- */}
-      <footer
-        className="mt-12 border-hairline border-t px-5 pt-10 pb-10 md:mt-0 md:px-16 md:py-16"
-        id="self-host"
-      >
-        <div className="mx-auto max-w-[1000px] md:flex md:items-end md:justify-between md:gap-10">
-          <div className="md:max-w-[420px]">
-            <Wordmark />
-            <p className="mt-4 font-sans text-body text-ink-muted md:mt-5">
-              Open source under AGPLv3. Run it yourself in one container, with
-              your own branding, for nothing.
-              <AtDesk> It's the same image our own instance runs.</AtDesk>
-            </p>
-            {/* An anchor wearing the button, not a button that navigates. The
-             * look is shared through buttonVariants precisely so a destination
-             * never has to pretend to be a control. */}
-            <div className="mt-6 hidden items-center gap-5 md:flex">
-              <a
-                className={cn(
-                  buttonVariants({ size: "sm", variant: "secondary" }),
-                  "gap-2"
-                )}
-                href={LINKS.source}
-                {...OUTBOUND}
-              >
-                Read the source
-                <Icon name="arrow-right" size={13} />
-              </a>
-              <SelfHostingLink />
-            </div>
-          </div>
-
-          {/* At 390 all seven wrap, because a column of seven tap targets is a
-           * column of near-misses. */}
-          <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3 md:hidden">
-            <SourceLink />
-            <SecurityLink />
-            <SelfHostingLink />
-            <WhyAgplLink />
-            <ChangelogLink />
-            <SecurityMailLink />
-            <AbuseMailLink />
-          </div>
-
-          {/* At a desk the left column stays on the site or opens a mail client
-           * and the right column leaves for the repository. That is the only
-           * grouping five links need, and it beats hanging an outbound glyph off
-           * half of them. One security link, not two: the security model and the
-           * threat model are one page. */}
-          <div className="hidden md:flex md:gap-16 md:pb-1">
-            <div className="flex flex-col gap-2.5">
+            {/* At 390 all seven wrap, because a column of seven tap targets is a
+             * column of near-misses. */}
+            <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3 md:hidden">
+              <SourceLink />
               <SecurityLink />
+              <SelfHostingLink />
+              <WhyAgplLink />
+              <ChangelogLink />
               <SecurityMailLink />
               <AbuseMailLink />
             </div>
-            <div className="flex flex-col gap-2.5">
-              <WhyAgplLink />
-              <ChangelogLink />
+
+            {/* At a desk the left column stays on the site or opens a mail client
+             * and the right column leaves for the repository. That is the only
+             * grouping five links need, and it beats hanging an outbound glyph off
+             * half of them. One security link, not two: the security model and the
+             * threat model are one page. */}
+            <div className="hidden md:flex md:gap-16 md:pb-1">
+              <div className="flex flex-col gap-2.5">
+                <SecurityLink />
+                <SecurityMailLink />
+                <AbuseMailLink />
+              </div>
+              <div className="flex flex-col gap-2.5">
+                <WhyAgplLink />
+                <ChangelogLink />
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* No trackers is a claim we can actually back, so it is said plainly and
-         * last. Zero third-party scripts and zero analytics site-wide, which is
-         * also why there is no cookie banner. */}
-        <div className="mx-auto mt-8 flex max-w-[1000px] items-center justify-between border-hairline border-t pt-6 md:mt-14 md:pt-7">
-          <p className="font-sans text-ink-faint text-small">
-            No analytics, no third-party scripts, no cookie banner to dismiss.
-          </p>
-          <p className="hidden font-mono text-ink-faint text-meta md:block">
-            securesend.dev
-          </p>
-        </div>
-      </footer>
+          {/* No trackers is a claim we can actually back, so it is said plainly and
+           * last. Zero third-party scripts and zero analytics site-wide, which is
+           * also why there is no cookie banner. */}
+          <div className="mx-auto mt-8 flex max-w-[1000px] items-center justify-between border-hairline border-t pt-6 md:mt-14 md:pt-7">
+            <p className="font-sans text-ink-faint text-small">
+              No analytics, no third-party scripts, no cookie banner to dismiss.
+            </p>
+            <p className="hidden font-mono text-ink-faint text-meta md:block">
+              securesend.dev
+            </p>
+          </div>
+        </footer>
+      </div>
+
+      <PhoneBar />
     </div>
   );
 }
