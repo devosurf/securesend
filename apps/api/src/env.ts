@@ -1,18 +1,14 @@
 const DEFAULT_PORT = 3000;
 
-function read(name: string): string | undefined {
-  return process.env[name];
-}
+const { DATABASE_URL, PORT } = process.env;
 
-function required(name: string): string {
-  const value = read(name);
-  if (!value) {
-    throw new Error(`${name} is not set`);
-  }
-  return value;
+if (!DATABASE_URL) {
+  throw new Error(
+    "DATABASE_URL is not set. Copy .env.example to .env for development."
+  );
 }
 
 export const env = {
-  databaseUrl: required("DATABASE_URL"),
-  port: Number(read("PORT") ?? DEFAULT_PORT),
+  databaseUrl: DATABASE_URL,
+  port: Number(PORT ?? DEFAULT_PORT),
 };
