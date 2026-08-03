@@ -6,6 +6,7 @@ import { bodyLimit } from "hono/body-limit";
 import { db } from "../db/client";
 import { countOne } from "../db/counters";
 import { secrets } from "../db/schema";
+import { takeAttachments } from "./attachments";
 import { lookUp } from "./state";
 
 /*
@@ -18,6 +19,10 @@ import { lookUp } from "./state";
  * longer matches "still live" and it leaves with nothing. Exactly one winner, at
  * any number of simultaneous presses, and that is row-level atomicity doing the
  * work rather than anything clever in this file.
+ *
+ * That goes for the whole secret. Attachments are separate rows, so they are taken
+ * inside the same claim, and they are deleted rather than emptied: a tombstone is
+ * status and timestamps, and a scrubbed attachment row would still carry a count.
  *
  * The word for what happened is `used`. This route watches a press arrive and
  * ciphertext go out; whether the browser on the other end could decrypt it never
@@ -80,6 +85,11 @@ export const reveal = new Hono().post(
         return null;
       }
 
+      /* The files go with whoever won the row, in the same transaction and by the
+       * same act. A secret opens as one thing: an envelope handed over without its
+       * attachments is a file list naming bytes that are already gone. */
+      const attachments = await takeAttachments(tx, id);
+
       await tx
         .update(secrets)
         .set({ envelope: null, envelopeIv: null, usedAt: sql`now()` })
@@ -88,13 +98,16 @@ export const reveal = new Hono().post(
       await countOne(tx, "reveals");
 
       return {
-        ciphertext: bytesToBase64url(live.envelope),
-        iv: bytesToBase64url(live.iv),
+        attachments,
+        envelope: {
+          ciphertext: bytesToBase64url(live.envelope),
+          iv: bytesToBase64url(live.iv),
+        },
       };
     });
 
     if (released) {
-      return c.json({ envelope: released, id });
+      return c.json({ ...released, id });
     }
 
     // Nothing was claimed, so the caller is owed the truth about why. The lookup

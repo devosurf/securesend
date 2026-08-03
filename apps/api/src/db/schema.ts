@@ -3,6 +3,7 @@ import {
   date,
   integer,
   pgTable,
+  primaryKey,
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
@@ -53,6 +54,30 @@ export const secrets = pgTable("secrets", {
   /** Who burned it. Only ever the sender in v0, and the recipient is told so. */
   burnReason: text(),
 });
+
+/**
+ * A file's bytes, one row per attachment, encrypted on their own under the same
+ * data key as the envelope that names them. The name, the size and the type are
+ * inside that envelope and never here: this table holds bytes and a position.
+ *
+ * These rows are deleted rather than nulled when a secret dies, which is the one
+ * place attachments differ from the envelope. A tombstone is status and
+ * timestamps, and a row left standing with its ciphertext scrubbed would still
+ * tell the next reader how many files there were and how big they had been.
+ */
+export const attachments = pgTable(
+  "attachments",
+  {
+    secretId: text()
+      .notNull()
+      .references(() => secrets.id, { onDelete: "cascade" }),
+    /** Its place in the envelope's file list, which is bound into its ciphertext. */
+    index: integer().notNull(),
+    ciphertext: bytea().notNull(),
+    iv: bytea().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.secretId, table.index] })]
+);
 
 /**
  * Product health, one row per day. Nothing here is keyed by IP, secret or

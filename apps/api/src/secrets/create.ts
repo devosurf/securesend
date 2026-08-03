@@ -7,7 +7,7 @@ import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import { db } from "../db/client";
 import { countOne } from "../db/counters";
-import { secrets } from "../db/schema";
+import { attachments, secrets } from "../db/schema";
 import { env } from "../env";
 import { hashManagementToken, mintManagementToken } from "./management";
 
@@ -23,6 +23,11 @@ import { hashManagementToken, mintManagementToken } from "./management";
  * What it must never do is learn anything. The body is strict, so the key cannot
  * ride along in a field nobody reads, and no rejection quotes what it was given:
  * an error that carries ciphertext is an error that puts ciphertext in a log.
+ *
+ * A file is the same thing as an envelope here, which is the point: bytes, an iv,
+ * and a position. The name, the size and the type are inside the envelope's own
+ * ciphertext, so this route cannot see them and there is no field it could take
+ * them in.
  */
 
 const CREATED = 201;
@@ -73,9 +78,35 @@ function isBase64url(value: string): boolean {
  * byte cap from a transport length would have to allow for the encoding ratio
  * and for json escaping, and a cap that has to be guessed is a cap that drifts.
  */
-const MAX_BODY_BYTES = encodedLength(env.maxEnvelopeBytes) * 2;
+const MAX_BODY_BYTES = encodedLength(env.maxTotalBytes) * 2;
+
+/**
+ * Exactly the positions of a file list: zero to one less than the count, each
+ * once. An index is bound into its attachment's ciphertext as additional data and
+ * matched against the file list inside the envelope, so any other set is a secret
+ * that could never be opened. Refusing it beats storing one nobody can read.
+ */
+function numbersAFileList(files: readonly { index: number }[]): boolean {
+  const places = new Set(files.map((file) => file.index));
+
+  return (
+    places.size === files.length &&
+    files.every((file) => file.index < files.length)
+  );
+}
 
 const createBody = z.strictObject({
+  attachments: z
+    .array(
+      z.strictObject({
+        ciphertext: z.string().min(1).refine(isBase64url, "not base64url"),
+        index: z.number().int().min(0),
+        iv: z.string().length(IV_CHARS).refine(isBase64url, "not base64url"),
+      })
+    )
+    .max(env.maxAttachments)
+    .refine(numbersAFileList, "not the positions of a file list")
+    .default([]),
   envelope: z.strictObject({
     ciphertext: z.string().min(1).refine(isBase64url, "not base64url"),
     iv: z.string().length(IV_CHARS).refine(isBase64url, "not base64url"),
@@ -115,7 +146,7 @@ export const create = new Hono().post(
         )
   ),
   async (c) => {
-    const { envelope, expiry, id } = c.req.valid("json");
+    const { attachments: files, envelope, expiry, id } = c.req.valid("json");
 
     const ciphertext = base64urlToBytes(envelope.ciphertext);
     if (ciphertext.length > env.maxEnvelopeBytes) {
@@ -125,10 +156,33 @@ export const create = new Hono().post(
       );
     }
 
+    const rows = files.map((file) => ({
+      ciphertext: base64urlToBytes(file.ciphertext),
+      index: file.index,
+      iv: base64urlToBytes(file.iv),
+      secretId: id,
+    }));
+
+    /* The cap is on the whole secret rather than on any one part of it: two files
+     * that each fit and together do not are exactly what a per-file limit waves
+     * through, and what the instance pays for is the row. */
+    const total = rows.reduce(
+      (sum, file) => sum + file.ciphertext.length,
+      ciphertext.length
+    );
+    if (total > env.maxTotalBytes) {
+      return c.json(
+        { error: "that secret is too big", limit: env.maxTotalBytes },
+        TOO_LARGE
+      );
+    }
+
     const token = mintManagementToken();
 
-    /* Both statements or neither: a create that was refused for a taken id must
-     * not show up in the day's count. */
+    /* Every statement or none. A create refused for a taken id must not show up
+     * in the day's count, and the two halves of a secret have to arrive together:
+     * an envelope without its files can never be opened, and files without their
+     * envelope are bytes nobody will come back for. */
     const [row] = await db.transaction(async (tx) => {
       const inserted = await tx
         .insert(secrets)
@@ -145,6 +199,9 @@ export const create = new Hono().post(
         .returning({ expiresAt: secrets.expiresAt, id: secrets.id });
 
       if (inserted.length > 0) {
+        if (rows.length > 0) {
+          await tx.insert(attachments).values(rows);
+        }
         await countOne(tx, "creates");
       }
 

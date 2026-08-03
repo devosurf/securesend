@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "../db/client";
 import { countOne } from "../db/counters";
 import { secrets } from "../db/schema";
+import { takeAttachments } from "./attachments";
 import { MANAGEMENT_TOKEN_LENGTH, managesSecret } from "./management";
 import { lookUp, statusOf } from "./state";
 
@@ -103,6 +104,12 @@ export const burn = new Hono().post(
       if (!claimed) {
         return null;
       }
+
+      /* Only once the row is this sender's to kill. A burn releases nothing, so
+       * what comes back is dropped and the delete is the whole point: files left
+       * standing under a row already saying the secret was destroyed would be the
+       * larger half of it still sitting on the instance. */
+      await takeAttachments(tx, id);
 
       await countOne(tx, "burns");
 

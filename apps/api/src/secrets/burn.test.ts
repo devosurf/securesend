@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../app";
 import { closeDatabase } from "../db/client";
 import { mintManagementToken } from "./management";
-import { countToday, expire, rowOf, seal } from "./testing";
+import { attachmentRowsOf, countToday, expire, rowOf, seal } from "./testing";
 
 afterAll(closeDatabase);
 
@@ -113,6 +113,25 @@ describe("POST /api/secrets/:id/burn", () => {
     const response = await burn(sealed);
 
     expect(response.headers.get("cache-control")).toContain("no-store");
+  });
+
+  /* A burn that left the files standing would leave the larger half of the secret
+   * on the instance, under a row already telling everybody it was destroyed. */
+  it("destroys the attachments in the same breath as the envelope", async () => {
+    const sealed = await seal("24h", 3);
+
+    await burn(sealed);
+
+    expect(await attachmentRowsOf(sealed.id)).toStrictEqual([]);
+    expect((await rowOf(sealed.id)).envelope).toBeNull();
+  });
+
+  it("leaves the files alone when it refuses the burn", async () => {
+    const sealed = await seal("24h", 2);
+
+    await ask(sealed.id, { managementToken: mintManagementToken() });
+
+    expect(await attachmentRowsOf(sealed.id)).toHaveLength(2);
   });
 });
 

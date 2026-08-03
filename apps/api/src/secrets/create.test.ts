@@ -6,7 +6,14 @@ import { app } from "../app";
 import { closeDatabase, db } from "../db/client";
 import { secrets } from "../db/schema";
 import { hashManagementToken, MANAGEMENT_TOKEN_LENGTH } from "./management";
-import { bytes, countToday, type Expiry, IV_BYTES } from "./testing";
+import {
+  attached,
+  attachmentRowsOf,
+  bytes,
+  countToday,
+  type Expiry,
+  IV_BYTES,
+} from "./testing";
 
 afterAll(closeDatabase);
 
@@ -285,5 +292,192 @@ describe("POST /api/secrets, refused", () => {
     await post({ ...draft(), id: body.id });
 
     expect(await countToday("creates")).toBe(before);
+  });
+});
+
+/*
+ * Attachments, which to this route are the same thing an envelope is: bytes it
+ * cannot read, under an id and a position it can check.
+ *
+ * The whole reason files are a separate table rather than more json is that a
+ * 10MB attachment must not inflate the part every envelope has. The whole reason
+ * this route sees no filename is that the name is inside the envelope, encrypted
+ * with everything else. Both are load-bearing and both are tested here.
+ */
+describe("POST /api/secrets, attachments", () => {
+  it("stores every attachment it was handed, byte for byte", async () => {
+    const body = { ...draft(), attachments: attached(3) };
+
+    const response = await post(body);
+    expect(response.status).toBe(CREATED);
+
+    const rows = await attachmentRowsOf(body.id);
+    expect(rows.map((row) => row.index)).toStrictEqual([0, 1, 2]);
+    expect(rows.map((row) => row.ciphertext)).toStrictEqual(
+      body.attachments.map((one) => base64urlToBytes(one.ciphertext))
+    );
+    expect(rows.map((row) => row.iv)).toStrictEqual(
+      body.attachments.map((one) => base64urlToBytes(one.iv))
+    );
+  });
+
+  it("stores nothing but bytes and a position", async () => {
+    const body = { ...draft(), attachments: attached(1) };
+
+    await post(body);
+
+    const [row] = await attachmentRowsOf(body.id);
+    expect(Object.keys(row ?? {}).toSorted()).toStrictEqual([
+      "ciphertext",
+      "index",
+      "iv",
+      "secretId",
+    ]);
+  });
+
+  /* The filename lives inside the envelope. A schema that ignored what it did not
+   * ask for is how one would arrive in a column, and then in a log line somebody
+   * adds later. */
+  it("refuses an attachment carrying a name, a size or a type", async () => {
+    const body = { ...draft(), attachments: attached(1) };
+    const extras = [
+      { name: "recovery-codes.txt" },
+      { size: 4096 },
+      { type: "text/plain" },
+    ];
+
+    const refused = await Promise.all(
+      extras.map((extra) =>
+        post({
+          ...body,
+          attachments: [{ ...body.attachments[0], ...extra }],
+        })
+      )
+    );
+
+    expect(refused.map((response) => response.status)).toStrictEqual(
+      extras.map(() => BAD_REQUEST)
+    );
+  });
+
+  it("takes an envelope with no attachments at all", async () => {
+    const body = { ...draft(), attachments: [] };
+
+    expect((await post(body)).status).toBe(CREATED);
+    expect(await attachmentRowsOf(body.id)).toStrictEqual([]);
+  });
+
+  it("takes an envelope that does not mention attachments", async () => {
+    const body = draft();
+
+    expect((await post(body)).status).toBe(CREATED);
+    expect(await attachmentRowsOf(body.id)).toStrictEqual([]);
+  });
+
+  it("counts one create for an envelope however many files it carries", async () => {
+    const before = await countToday("creates");
+
+    await post({ ...draft(), attachments: attached(4) });
+
+    expect(await countToday("creates")).toBe(before + 1);
+  });
+});
+
+describe("POST /api/secrets, attachments refused", () => {
+  /* The indices are what bind each ciphertext to its place in the envelope's file
+   * list, so a set that is not exactly 0..n-1 is an envelope that could not open.
+   * Refusing it here beats storing a secret nobody can ever read. */
+  it("refuses indices that are not the positions of a file list", async () => {
+    const wrong = [
+      [{ index: 1 }],
+      [{ index: 0 }, { index: 2 }],
+      [{ index: 0 }, { index: 0 }],
+      [{ index: -1 }],
+      [{ index: 0.5 }],
+    ];
+
+    const refused = await Promise.all(
+      wrong.map((indices) => {
+        const body = draft();
+        const files = attached(indices.length);
+
+        return post({
+          ...body,
+          attachments: files.map((one, at) => ({
+            ...one,
+            ...indices[at],
+          })),
+        });
+      })
+    );
+
+    expect(refused.map((response) => response.status)).toStrictEqual(
+      wrong.map(() => BAD_REQUEST)
+    );
+  });
+
+  it("refuses an attachment iv that is not the length one uses", async () => {
+    const body = { ...draft(), attachments: attached(1) };
+
+    const response = await post({
+      ...body,
+      attachments: [{ ...body.attachments[0], iv: bytes(8) }],
+    });
+
+    expect(response.status).toBe(BAD_REQUEST);
+  });
+
+  it("refuses more files than one envelope may carry, and stores nothing", async () => {
+    const body = { ...draft(), attachments: attached(11) };
+
+    expect((await post(body)).status).toBe(BAD_REQUEST);
+    expect(await isStored(body.id)).toBe(false);
+  });
+
+  /* The cap is on the whole secret rather than on any one part: two files inside
+   * the per-file space that together pass the total are the case a per-file limit
+   * would wave through. */
+  it("refuses a total over the cap even when every part is under it", async () => {
+    const body = {
+      ...draft(),
+      attachments: attached(2, 6 * 1024 * 1024),
+    };
+
+    const response = await post(body);
+
+    expect(response.status).toBe(TOO_LARGE);
+    expect(await response.json()).toStrictEqual({
+      error: expect.any(String),
+      limit: 10 * 1024 * 1024,
+    });
+    expect(await isStored(body.id)).toBe(false);
+  });
+
+  /* Neither half of the row may survive a refusal. An envelope stored without its
+   * files is a secret that can never open, and files stored without their envelope
+   * are bytes nobody will ever come back for. */
+  it("stores neither the envelope nor the files when it refuses one", async () => {
+    const body = { ...draft(), attachments: attached(2, 6 * 1024 * 1024) };
+
+    await post(body);
+
+    expect(await isStored(body.id)).toBe(false);
+    expect(await attachmentRowsOf(body.id)).toStrictEqual([]);
+  });
+
+  it("still refuses a json part over its own cap, files or no files", async () => {
+    const body = {
+      ...draft(),
+      attachments: attached(1),
+      envelope: { ciphertext: bytes(300 * 1024), iv: bytes(IV_BYTES) },
+    };
+
+    const response = await post(body);
+
+    expect(response.status).toBe(TOO_LARGE);
+    expect(await response.json()).toStrictEqual({
+      error: expect.any(String),
+      limit: 256 * 1024,
+    });
   });
 });

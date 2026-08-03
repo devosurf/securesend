@@ -5,7 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { app } from "../app";
 import { db } from "../db/client";
 import type { Counted } from "../db/counters";
-import { dailyCounters, secrets } from "../db/schema";
+import { attachments, dailyCounters, secrets } from "../db/schema";
 
 /*
  * One sealed envelope on a real instance, and a way to look at the row under it.
@@ -27,7 +27,15 @@ export const IV_BYTES = 12;
 
 export type Expiry = "1h" | "24h" | "72h";
 
+export interface Attachment {
+  ciphertext: string;
+  index: number;
+  iv: string;
+}
+
 export interface Sealed {
+  /** Always an array, empty when the fixture was asked for no files. */
+  attachments: Attachment[];
   envelope: { ciphertext: string; iv: string };
   expiresAt: string;
   id: string;
@@ -38,12 +46,27 @@ export function bytes(length: number): string {
   return bytesToBase64url(randomBytes(length));
 }
 
+/** As many attachments as asked for, numbered from zero the way a client numbers them. */
+export function attached(count: number, length = 64): Attachment[] {
+  return Array.from({ length: count }, (_unused, index) => ({
+    ciphertext: bytes(length),
+    index,
+    iv: bytes(IV_BYTES),
+  }));
+}
+
 /** Creates one envelope through the real route, so nothing here fakes a row. */
-export async function seal(expiry: Expiry = "24h"): Promise<Sealed> {
+export async function seal(expiry: Expiry = "24h", files = 0): Promise<Sealed> {
   const envelope = { ciphertext: bytes(96), iv: bytes(IV_BYTES) };
+  const carried = attached(files);
 
   const response = await app.request("/api/secrets", {
-    body: JSON.stringify({ envelope, expiry, id: newSecretId() }),
+    body: JSON.stringify({
+      attachments: carried,
+      envelope,
+      expiry,
+      id: newSecretId(),
+    }),
     headers: { "content-type": "application/json" },
     method: "POST",
   });
@@ -60,7 +83,7 @@ export async function seal(expiry: Expiry = "24h"): Promise<Sealed> {
     managementToken: string;
   };
 
-  return { envelope, ...answer };
+  return { attachments: carried, envelope, ...answer };
 }
 
 export async function rowOf(id: string) {
@@ -69,6 +92,15 @@ export async function rowOf(id: string) {
     throw new Error("the envelope this test needs was never stored");
   }
   return found;
+}
+
+/** Whatever attachment rows a secret still has, in index order. */
+export function attachmentRowsOf(id: string) {
+  return db
+    .select()
+    .from(attachments)
+    .where(eq(attachments.secretId, id))
+    .orderBy(attachments.index);
 }
 
 /**

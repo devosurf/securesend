@@ -4,7 +4,14 @@ import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../app";
 import { closeDatabase, db } from "../db/client";
 import { secrets } from "../db/schema";
-import { countToday, expire, rowOf, seal } from "./testing";
+import {
+  type Attachment,
+  attachmentRowsOf,
+  countToday,
+  expire,
+  rowOf,
+  seal,
+} from "./testing";
 
 afterAll(closeDatabase);
 
@@ -34,12 +41,14 @@ const NOT_FOUND = 404;
 const GONE = 410;
 
 interface Released {
+  attachments: Attachment[];
   envelope: { ciphertext: string; iv: string };
   id: string;
 }
 
 /** What one presser got back: the payload, or the reason there was none. */
 interface Answer {
+  attachments?: Attachment[];
   envelope?: { ciphertext: string; iv: string };
   state?: string;
 }
@@ -65,11 +74,16 @@ describe("POST /api/secrets/:id/reveal", () => {
 
     const released = (await (await press(sealed.id)).json()) as Released;
 
-    expect(Object.keys(released).toSorted()).toStrictEqual(["envelope", "id"]);
+    expect(Object.keys(released).toSorted()).toStrictEqual([
+      "attachments",
+      "envelope",
+      "id",
+    ]);
     expect(Object.keys(released.envelope).toSorted()).toStrictEqual([
       "ciphertext",
       "iv",
     ]);
+    expect(released.attachments).toStrictEqual([]);
   });
 
   /* The scrub is the death. A row that had been handed out and still held its
@@ -138,6 +152,93 @@ describe("POST /api/secrets/:id/reveal", () => {
     const response = await press(sealed.id);
 
     expect(response.headers.get("cache-control")).toContain("no-store");
+  });
+});
+
+/*
+ * A secret with files dies as one thing, which is the only way it can die.
+ *
+ * An envelope released without its attachments is a file list naming bytes that
+ * are gone. Attachments released without their envelope are bytes with no name,
+ * no order and no key. So the same transaction hands over both or neither, and
+ * takes both with it on the way out.
+ *
+ * The rows are deleted rather than emptied. A tombstone is status and timestamps;
+ * a row left standing with its ciphertext scrubbed would still tell the next
+ * reader how many files there had been.
+ */
+describe("POST /api/secrets/:id/reveal, with files", () => {
+  it("releases every attachment it was given, byte for byte", async () => {
+    const sealed = await seal("24h", 3);
+
+    const released = (await (await press(sealed.id)).json()) as Released;
+
+    expect(released.attachments).toStrictEqual(sealed.attachments);
+    expect(released.envelope).toStrictEqual(sealed.envelope);
+  });
+
+  it("hands them back in the order the envelope numbers them", async () => {
+    const sealed = await seal("24h", 4);
+
+    const released = (await (await press(sealed.id)).json()) as Released;
+
+    expect(released.attachments.map((one) => one.index)).toStrictEqual([
+      0, 1, 2, 3,
+    ]);
+  });
+
+  it("takes the attachment rows with it, leaving no count behind", async () => {
+    const sealed = await seal("24h", 3);
+
+    await press(sealed.id);
+
+    expect(await attachmentRowsOf(sealed.id)).toStrictEqual([]);
+    const row = await rowOf(sealed.id);
+    expect(row.envelope).toBeNull();
+    expect(row.usedAt).not.toBeNull();
+  });
+
+  /* The claim is on the secrets row, and the files go with whoever wins it. Seven
+   * losers leaving with a file each would be the one-time promise broken by the
+   * half of the secret nobody was watching. */
+  it("releases the files exactly once under a parallel press", async () => {
+    const sealed = await seal("24h", 2);
+
+    const answers = await Promise.all(
+      Array.from({ length: 8 }, () => press(sealed.id))
+    );
+    const bodies = (await Promise.all(
+      answers.map((response) => response.json())
+    )) as Answer[];
+
+    const carried = bodies.filter(
+      (body) => (body.attachments?.length ?? 0) > 0
+    );
+    expect(carried).toHaveLength(1);
+    expect(carried[0]?.attachments).toStrictEqual(sealed.attachments);
+
+    expect(await attachmentRowsOf(sealed.id)).toStrictEqual([]);
+  });
+
+  it("releases nothing from an expired secret, and keeps its files sealed", async () => {
+    const sealed = await seal("24h", 2);
+    await expire(sealed.id);
+
+    const response = await press(sealed.id);
+
+    expect(response.status).toBe(GONE);
+    expect(await response.json()).toMatchObject({ state: "expired" });
+    expect(await attachmentRowsOf(sealed.id)).toHaveLength(2);
+  });
+
+  it("says nothing about files to the second presser", async () => {
+    const sealed = await seal("24h", 2);
+    await press(sealed.id);
+
+    const answer = (await (await press(sealed.id)).json()) as Answer;
+
+    expect(answer.state).toBe("used");
+    expect(answer.attachments).toBeUndefined();
   });
 });
 
