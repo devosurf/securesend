@@ -8,6 +8,13 @@
       "when": 1785773177887,
       "tag": "0000_daily_counters",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785782558902,
+      "tag": "0001_secrets",
+      "breakpoints": true
     }
   ]
 }
