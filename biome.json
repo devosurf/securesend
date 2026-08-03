@@ -16,6 +16,16 @@
   },
   "overrides": [
     {
+      "includes": ["apps/api/src/db/schema.ts"],
+      "assist": {
+        "actions": {
+          "source": {
+            "useSortedKeys": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/crypto/**"],
       "linter": {
         "rules": {
