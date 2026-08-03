@@ -1,6 +1,10 @@
 node_modules/
 dist/
 build/
+# The web build, copied in when the api serves it the way the container does.
+apps/api/public/
+# What the build's prerender pass compiles for Node, then throws away.
+dist-ssr/
 coverage/
 .turbo/
 *.tsbuildinfo

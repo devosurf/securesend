@@ -40,8 +40,16 @@ app.all("/api/*", (c) => c.json({ error: "not found" }, NOT_FOUND));
 // One container serves the built SPA from this same process. In development the
 // build is absent and Vite serves the app instead.
 if (existsSync(WEB_BUILD)) {
+  // The two static pages are prerendered, so each one is a document the build
+  // already wrote rather than a script tag that becomes one.
+  app.get("/", serveStatic({ path: `${WEB_BUILD}/index.html` }));
+  app.get("/security", serveStatic({ path: `${WEB_BUILD}/security.html` }));
+
   app.use("/*", serveStatic({ root: WEB_BUILD }));
-  app.get("*", serveStatic({ path: `${WEB_BUILD}/index.html` }));
+
+  // Everything left is a client-rendered route, which in practice means a
+  // secret's address. It gets the empty shell, never the homepage's markup.
+  app.get("*", serveStatic({ path: `${WEB_BUILD}/shell.html` }));
 }
 
 export { app };
