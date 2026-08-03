@@ -1,0 +1,35 @@
+name: securesend
+
+# The whole product: one app container plus Postgres. Change the password, then
+# `docker compose -f compose.example.yaml up`.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://securesend:change-me@db:5432/securesend
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: securesend
+      POSTGRES_PASSWORD: change-me
+      POSTGRES_DB: securesend
+    volumes:
+      # Postgres 18 keeps its data in a version subdirectory of this path.
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U securesend -d securesend"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db-data:

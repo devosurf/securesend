@@ -1,0 +1,25 @@
+name: securesend-dev
+
+# Postgres for `pnpm dev` and `pnpm test`. The product itself runs from your
+# working tree, not from a container: see compose.example.yaml for that.
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: securesend
+      POSTGRES_PASSWORD: securesend
+      POSTGRES_DB: securesend
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # Postgres 18 keeps its data in a version subdirectory of this path.
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U securesend -d securesend"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db-data:

@@ -1,0 +1,13 @@
+.git
+.github
+**/node_modules
+**/dist
+**/*.log
+.env
+.env.*
+!.env.example
+.changeset
+.nvmrc
+compose*.yaml
+README.md
+AGENTS.md
