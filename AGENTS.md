@@ -75,7 +75,9 @@ Three seams, and no component-test layer:
    real Postgres with migrations applied by the CLI. Real integrations over
    mocks.
 2. **The crypto package's public API.** Pure unit tests, colocated, green in
-   both Node 22 and a browser runtime.
+   both Node 22 and a browser runtime. `pnpm test` runs them in both. A test
+   named `*.node.test.ts` is one that reads the repo itself, so it runs in Node
+   only; everything else has to pass in the browser too.
 3. **One thin Playwright smoke** over the built container, covering only what
    genuinely needs a browser: fragment handling, clipboard, downloads.
 
