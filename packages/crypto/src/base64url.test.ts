@@ -3,6 +3,7 @@ import { base64urlToBytes, bytesToBase64url } from "./base64url";
 
 const UNEXPECTED_CHARACTER = /^not base64url: unexpected character$/;
 const INCOMPLETE = /^not base64url: incomplete$/;
+const TRAILING_BITS = /^not base64url: trailing bits$/;
 
 function bytes(...values: number[]): Uint8Array {
   return new Uint8Array(values);
@@ -63,6 +64,17 @@ describe("base64urlToBytes", () => {
 
   it("rejects a length no byte string can produce", () => {
     expect(() => base64urlToBytes("Zm9vY")).toThrow();
+  });
+
+  // "Zg" is the one encoding of [102]. "Zh" carries bits in the tail that the
+  // encoder always leaves at zero, so a corrupt last character has to fail here
+  // rather than decode to a plausible key.
+  it("rejects bits in the tail that the encoder never sets", () => {
+    expect(bytesToBase64url(bytes(102))).toBe("Zg");
+
+    for (const corrupted of ["Zh", "Zp", "Z_"]) {
+      expect(() => base64urlToBytes(corrupted)).toThrow(TRAILING_BITS);
+    }
   });
 
   // The fragment token is base64url, so a decode failure must never quote its input.

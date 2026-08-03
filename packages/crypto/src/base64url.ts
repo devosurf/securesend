@@ -57,5 +57,11 @@ export function base64urlToBytes(input: string): Uint8Array {
     }
   }
 
+  // The encoder leaves the bits past the last whole byte at zero. Anything else
+  // is a corrupted final character, and must not decode to a plausible key.
+  if ((buffer & ((1 << bufferedBits) - 1)) !== 0) {
+    throw new Error("not base64url: trailing bits");
+  }
+
   return decoded;
 }
