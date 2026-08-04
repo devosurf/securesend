@@ -163,9 +163,11 @@ function troubleIs(trouble: CheckTrouble): string {
  * re-check is here because asking again is the whole of what there is to do.
  */
 function Unchecked({
+  freshness,
   onRecheck,
   trouble,
 }: {
+  freshness: Freshness;
   onRecheck: () => Promise<void>;
   trouble: CheckTrouble;
 }) {
@@ -178,9 +180,13 @@ function Unchecked({
       </p>
       <div className={cn(QUIET, "mt-2.5 flex flex-wrap items-center gap-2")}>
         {troubleIs(trouble)}
-        <TextAction className="text-small" onClick={onRecheck} tone="quiet">
-          Check again
-        </TextAction>
+        {/* Gone while a check is in flight, as on the panel: two overlapping asks can
+         * answer out of order, and the later answer would be the older one. */}
+        {freshness === "checking" ? null : (
+          <TextAction className="text-small" onClick={onRecheck} tone="quiet">
+            Check again
+          </TextAction>
+        )}
       </div>
     </div>
   );
@@ -202,15 +208,26 @@ export function DeviceMemory() {
   }
 
   /*
+   * Whether this mount has had a check of its own answer yet.
+   *
+   * The provider outlives this element, which is unmounted for the length of the receipt,
+   * so on the way back its state can still hold the verdict of a check from before the
+   * secret that was just made. Nothing is said about a check until this mount has one.
+   */
+  const [checked, setChecked] = useState(false);
+
+  /*
    * One lookup when this comes into view, which is page load and again after Send
    * another: the element is unmounted for the length of the receipt, so a sender who
    * sends a second secret gets a list with it in.
    */
   useEffect(() => {
-    refresh().catch(() => {
-      // Nothing to report: a lookup that did not land answers rather than throwing,
-      // and the rows on screen stay as they are.
-    });
+    refresh()
+      .catch(() => {
+        // Nothing to report: a lookup that did not land answers rather than throwing,
+        // and the rows on screen stay as they are.
+      })
+      .finally(() => setChecked(true));
   }, [refresh]);
 
   if (memory === "none") {
@@ -221,8 +238,14 @@ export function DeviceMemory() {
     return <OnlyTombstones />;
   }
 
-  if (memory === "unchecked" && checkTrouble) {
-    return <Unchecked onRecheck={recheck} trouble={checkTrouble} />;
+  if (memory === "unchecked" && checked && checkTrouble) {
+    return (
+      <Unchecked
+        freshness={freshness}
+        onRecheck={recheck}
+        trouble={checkTrouble}
+      />
+    );
   }
 
   const used = rows.filter((row) => row.status === "used").length;
@@ -265,7 +288,7 @@ export function DeviceMemory() {
       {/* A re-check that brought nothing back. The rows above are still true, they are
        * just as old as the line already says, so this adds the reason and never takes the
        * list away. */}
-      <Collapse open={checkTrouble !== null}>
+      <Collapse open={checked && checkTrouble !== null}>
         <p className={cn(QUIET, "pt-2")}>{said.current}</p>
       </Collapse>
 

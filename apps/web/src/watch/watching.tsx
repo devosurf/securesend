@@ -134,11 +134,16 @@ export function WatchProvider({ children }: { children: ReactNode }) {
    * history and take the panel off the page with it.
    */
   const refresh = useCallback(async () => {
+    /* A check in flight has no verdict yet, so the last one's is dropped as this one
+     * starts. Without that, a reason outlives the check that produced it: this provider
+     * survives the receipt while the panel under it does not, so a sender who was metered,
+     * then made a link the instance took, would come back to the old refusal. */
+    setCheckTrouble(null);
+
     const kept = browserMemory();
     if (!kept) {
       setRows([]);
       setRemembers(false);
-      setCheckTrouble(null);
       return true;
     }
 
@@ -148,9 +153,6 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     const asked = await statusesOf(held);
 
     if (asked.status === "answered") {
-      /* A check that landed clears the last one's excuse. Leaving it up would be the
-       * panel explaining an absence that is no longer there. */
-      setCheckTrouble(null);
       setRows(asked.rows);
       return true;
     }
