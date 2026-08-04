@@ -4,7 +4,7 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "../db/client";
-import { countOne } from "../db/counters";
+import { count } from "../db/counters";
 import { secrets } from "../db/schema";
 import { scrubAttachments } from "./attachments";
 import { MANAGEMENT_TOKEN_LENGTH, managesSecret } from "./management";
@@ -110,7 +110,7 @@ export const burn = new Hono().post(
        * still sitting on the instance. */
       await scrubAttachments(tx, id);
 
-      await countOne(tx, "burns");
+      await count(tx, "burns");
 
       return statusOf(claimed);
     });

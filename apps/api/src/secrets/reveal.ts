@@ -4,8 +4,9 @@ import { and, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { db } from "../db/client";
-import { countOne } from "../db/counters";
+import { count } from "../db/counters";
 import { secrets } from "../db/schema";
+import { buckets, perCaller } from "../limits/gates";
 import { takeAttachments } from "./attachments";
 import { lookUp } from "./state";
 
@@ -44,6 +45,10 @@ const NO_BODY = 0;
 
 export const reveal = new Hono().post(
   "/:id/reveal",
+  /* No watermark here. There is nothing to flood: a reveal destroys a row rather than
+   * making one, and the only thing it can cost the instance beyond a transaction is a
+   * secret somebody else was owed, which needs that secret's own link to reach. */
+  perCaller(buckets.reveals),
   bodyLimit({
     maxSize: NO_BODY,
     onError: (c) =>
@@ -95,7 +100,7 @@ export const reveal = new Hono().post(
         .set({ envelope: null, envelopeIv: null, usedAt: sql`now()` })
         .where(eq(secrets.id, id));
 
-      await countOne(tx, "reveals");
+      await count(tx, "reveals");
 
       return {
         attachments,

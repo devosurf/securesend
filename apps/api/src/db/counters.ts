@@ -12,6 +12,10 @@ import { dailyCounters } from "./schema";
  *
  * Every caller does this inside the transaction that did the thing, so a create or
  * a reveal that was refused cannot show up in the day's count.
+ *
+ * Three of the four are one at a time, because a person did them. Expiries are not:
+ * nobody is present when a clock runs out, so the sweep finds however many ran out
+ * since it last looked and counts them together, on the day it noticed.
  */
 
 export type Counted = "creates" | "reveals" | "burns" | "expiries";
@@ -19,12 +23,12 @@ export type Counted = "creates" | "reveals" | "burns" | "expiries";
 /** The half of a database handle this needs, so a transaction fits it as well. */
 type Counting = Pick<typeof db, "insert">;
 
-export function countOne(on: Counting, what: Counted) {
+export function count(on: Counting, what: Counted, howMany = 1) {
   return on
     .insert(dailyCounters)
-    .values({ [what]: 1, day: sql`current_date` })
+    .values({ [what]: howMany, day: sql`current_date` })
     .onConflictDoUpdate({
-      set: { [what]: sql`${dailyCounters[what]} + 1` },
+      set: { [what]: sql`${dailyCounters[what]} + ${howMany}` },
       target: dailyCounters.day,
     });
 }

@@ -6,9 +6,10 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import { db } from "../db/client";
-import { countOne } from "../db/counters";
+import { count } from "../db/counters";
 import { attachments, secrets } from "../db/schema";
 import { env } from "../env";
+import { buckets, perCaller, perInstance } from "../limits/gates";
 import { hashManagementToken, mintManagementToken } from "./management";
 
 /*
@@ -130,6 +131,12 @@ function refusedFields(issues: readonly z.core.$ZodIssue[]): string[] {
 
 export const create = new Hono().post(
   "/",
+  /* Before the body is read, because the cheapest way to refuse a flood of ten
+   * megabyte envelopes is to refuse them before they are ten megabytes in memory. The
+   * caller's own pace first and the instance's second, so one machine hammering is
+   * refused by its own bucket rather than spending everybody's allowance. */
+  perCaller(buckets.creates),
+  perInstance(buckets.instanceCreates),
   bodyLimit({
     maxSize: MAX_BODY_BYTES,
     onError: (c) => c.json({ error: "that envelope is too big" }, TOO_LARGE),
@@ -202,7 +209,7 @@ export const create = new Hono().post(
         if (rows.length > 0) {
           await tx.insert(attachments).values(rows);
         }
-        await countOne(tx, "creates");
+        await count(tx, "creates");
       }
 
       return inserted;

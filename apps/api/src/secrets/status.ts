@@ -2,6 +2,7 @@ import { zValidator } from "@hono/zod-validator";
 import { isSecretId } from "@securesend/crypto/ids";
 import { Hono } from "hono";
 import { z } from "zod";
+import { buckets, perCaller } from "../limits/gates";
 import { lookUp, lookUpAll, MAX_STATUS_IDS } from "./state";
 
 /*
@@ -32,8 +33,13 @@ const statusesBody = z.strictObject({
     .max(MAX_STATUS_IDS),
 });
 
+/*
+ * Both shapes take the same gate, and it is the most generous of the three: this is
+ * the route a preview bot lands on and the route every arriving recipient reads, so it
+ * is the one an office behind one address hits most.
+ */
 export const status = new Hono()
-  .get("/:id", async (c) => {
+  .get("/:id", perCaller(buckets.statuses), async (c) => {
     const id = c.req.param("id");
 
     // Refused before the query rather than by it: a lookup should not put an
@@ -46,6 +52,7 @@ export const status = new Hono()
   })
   .post(
     "/statuses",
+    perCaller(buckets.statuses),
     zValidator("json", statusesBody, (result, c) =>
       result.success
         ? undefined

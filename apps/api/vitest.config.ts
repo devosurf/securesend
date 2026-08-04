@@ -24,5 +24,6 @@ export default defineConfig({
     globalSetup: ["./vitest.global-setup.ts"],
     include: ["src/**/*.test.ts"],
     name: "api",
+    setupFiles: ["./vitest.setup.ts"],
   },
 });
