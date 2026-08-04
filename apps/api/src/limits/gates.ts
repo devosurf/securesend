@@ -70,10 +70,7 @@ export function forgetEveryone(): void {
   }
 }
 
-/**
- * The one key that is not a caller's address: the instance itself, counted as one.
- * A constant rather than an empty string so a stray key can never collide with it.
- */
+/** The one key that is not a caller's address: the instance itself, counted as one. */
 const THE_INSTANCE = "instance";
 
 /**
@@ -113,20 +110,53 @@ function refuse(c: Context, scope: Scope, retryAfter: number) {
   return c.json({ error: REFUSED[scope], retryAfter, scope }, TOO_MANY);
 }
 
-/** One caller's pace on one route. */
-export function perCaller(bucket: Bucket) {
-  return createMiddleware(async (c, next) => {
-    const taken = bucket.take(addressOf(c));
+/** One limit a route is held to: a bucket, what it counts under, and what to say. */
+interface Limit {
+  bucket: Bucket;
+  keyOf: (c: Context) => string;
+  scope: Scope;
+}
 
-    return taken.ok ? await next() : refuse(c, "ip", taken.retryAfter);
-  });
+/** One caller's pace, counted under their address. */
+export function perCaller(bucket: Bucket): Limit {
+  return { bucket, keyOf: addressOf, scope: "ip" };
 }
 
 /** The whole instance's pace, counted as one caller. */
-export function perInstance(bucket: Bucket) {
-  return createMiddleware(async (c, next) => {
-    const taken = bucket.take(THE_INSTANCE);
+export function perInstance(bucket: Bucket): Limit {
+  return { bucket, keyOf: () => THE_INSTANCE, scope: "instance" };
+}
 
-    return taken.ok ? await next() : refuse(c, "instance", taken.retryAfter);
+/**
+ * Holds a route to every limit given, in order, and charges nothing until they all
+ * allow it.
+ *
+ * The two passes are the point. Charging as it went would mean a create the watermark
+ * is about to refuse still costs the sender a token of their own, so a sender who
+ * retries into a full instance ten times ends up being told they are going faster than
+ * this instance takes from one place, about ten creates that never happened. Their own
+ * pace and the instance's are different facts and the whole reason a refusal names
+ * which one it is; spending on a refusal would make that name a lie within a minute.
+ *
+ * Order still matters for what a refusal says: the caller's own limit is asked first,
+ * because it is the one they can act on, and a caller hammering their own bucket is
+ * refused there and never reaches the shared one.
+ */
+export function paced(...limits: readonly Limit[]) {
+  return createMiddleware(async (c, next) => {
+    const asked = limits.map((limit) => ({ ...limit, key: limit.keyOf(c) }));
+
+    for (const limit of asked) {
+      const room = limit.bucket.check(limit.key);
+      if (!room.ok) {
+        return refuse(c, limit.scope, room.retryAfter);
+      }
+    }
+
+    for (const limit of asked) {
+      limit.bucket.take(limit.key);
+    }
+
+    return await next();
   });
 }

@@ -23,6 +23,7 @@ afterAll(closeDatabase);
  */
 
 const OK = 200;
+const CREATED = 201;
 const TOO_MANY = 429;
 
 interface Refusal {
@@ -81,6 +82,31 @@ function drain(bucket: Bucket, key: string): void {
   while (bucket.take(key).ok) {
     // Nothing: the point is the taking.
   }
+}
+
+/** The scopes a run of creates was refused under, in order, one call at a time. */
+async function scopesRefusing(
+  times: number,
+  seen: readonly string[] = []
+): Promise<readonly string[]> {
+  if (times <= 0) {
+    return seen;
+  }
+
+  const said = (await (await makeOne()).json()) as Refusal;
+
+  return await scopesRefusing(times - 1, [...seen, said.scope]);
+}
+
+/** How many creates get through in a row before something refuses one. */
+async function createsThrough(soFar = 0): Promise<number> {
+  if (soFar > ENOUGH) {
+    throw new Error("the instance refused nothing");
+  }
+
+  return (await makeOne()).status === CREATED
+    ? await createsThrough(soFar + 1)
+    : soFar;
 }
 
 describe("a caller going faster than a route takes", () => {
@@ -203,6 +229,27 @@ describe("the instance at its own creation limit", () => {
     const response = await post(`/api/secrets/${sealed.id}/reveal`);
 
     expect(response.status).toBe(OK);
+  });
+
+  /*
+   * A refusal costs the caller nothing, which is what keeps the two scopes honest.
+   *
+   * Charging as it went would mean a sender retrying into a full instance spends their
+   * own allowance on creates that never happened, and is then told they are going
+   * faster than this instance takes from one place. That sentence would be false, and
+   * it would be false because of the limiter rather than because of them.
+   */
+  it("spends none of the caller's own allowance while it refuses them", async () => {
+    drain(buckets.instanceCreates, "instance");
+
+    const scopes = await scopesRefusing(env.createPace.capacity * 2);
+    expect(new Set(scopes)).toStrictEqual(new Set(["instance"]));
+
+    /* The instance recovers. This caller made no secrets at all while it was full, so
+     * their own allowance has to be exactly what it was before they started asking. */
+    buckets.instanceCreates.clear();
+
+    expect(await createsThrough()).toBe(env.createPace.capacity);
   });
 });
 

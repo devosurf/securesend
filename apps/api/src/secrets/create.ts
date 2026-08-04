@@ -9,7 +9,7 @@ import { db } from "../db/client";
 import { count } from "../db/counters";
 import { attachments, secrets } from "../db/schema";
 import { env } from "../env";
-import { buckets, perCaller, perInstance } from "../limits/gates";
+import { buckets, paced, perCaller, perInstance } from "../limits/gates";
 import { hashManagementToken, mintManagementToken } from "./management";
 
 /*
@@ -135,8 +135,7 @@ export const create = new Hono().post(
    * megabyte envelopes is to refuse them before they are ten megabytes in memory. The
    * caller's own pace first and the instance's second, so one machine hammering is
    * refused by its own bucket rather than spending everybody's allowance. */
-  perCaller(buckets.creates),
-  perInstance(buckets.instanceCreates),
+  paced(perCaller(buckets.creates), perInstance(buckets.instanceCreates)),
   bodyLimit({
     maxSize: MAX_BODY_BYTES,
     onError: (c) => c.json({ error: "that envelope is too big" }, TOO_LARGE),

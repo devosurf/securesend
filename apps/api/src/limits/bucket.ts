@@ -60,6 +60,13 @@ interface Held {
 }
 
 export interface Bucket {
+  /**
+   * Whether a token is there, without taking it.
+   *
+   * A route behind more than one limit needs this: charging a caller for a request
+   * a later limit is about to refuse would leave them paying for work nobody did.
+   */
+  check: (key: string, now?: number) => Taken;
   /** Everything, now. Only a test needs this. */
   clear: () => void;
   /** Drops every entry that has refilled, and every entry a day old. */
@@ -105,11 +112,40 @@ export function tokenBucket({ capacity, refillMs }: Pace): Bucket {
     }
   }
 
-  function take(key: string, now = Date.now()): Taken {
+  function waitFor(tokens: number): number {
+    return Math.ceil(((1 - tokens) * refillMs) / A_SECOND);
+  }
+
+  /**
+   * What a caller has, or nothing when this has never met them.
+   *
+   * An entry a day past its birth reads as absent, which is where the ceiling on how
+   * long an address is kept actually happens: nothing reads one that old, and the next
+   * take writes over it.
+   */
+  function heldFor(key: string, now: number): Held | undefined {
     const one = held.get(key);
 
-    // A caller this has never met, or one whose entry has aged out from under them.
-    if (!one || now - one.bornAt >= A_DAY) {
+    return one && now - one.bornAt < A_DAY ? one : undefined;
+  }
+
+  function check(key: string, now = Date.now()): Taken {
+    const one = heldFor(key, now);
+    if (!one) {
+      return { ok: true };
+    }
+
+    const tokens = filled(one, now);
+
+    return tokens < 1
+      ? { ok: false, retryAfter: waitFor(tokens) }
+      : { ok: true };
+  }
+
+  function take(key: string, now = Date.now()): Taken {
+    const one = heldFor(key, now);
+
+    if (!one) {
       held.set(key, { at: now, bornAt: now, tokens: capacity - 1 });
       trim(now);
       return { ok: true };
@@ -124,10 +160,7 @@ export function tokenBucket({ capacity, refillMs }: Pace): Bucket {
      * accumulate float error, so nine refusals could cost a caller the tenth token
      * they had actually earned. */
     if (tokens < 1) {
-      return {
-        ok: false,
-        retryAfter: Math.ceil(((1 - tokens) * refillMs) / A_SECOND),
-      };
+      return { ok: false, retryAfter: waitFor(tokens) };
     }
 
     one.at = now;
@@ -136,6 +169,7 @@ export function tokenBucket({ capacity, refillMs }: Pace): Bucket {
   }
 
   return {
+    check,
     clear: () => held.clear(),
     forget,
     size: () => held.size,

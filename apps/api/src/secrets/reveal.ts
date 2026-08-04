@@ -6,7 +6,7 @@ import { bodyLimit } from "hono/body-limit";
 import { db } from "../db/client";
 import { count } from "../db/counters";
 import { secrets } from "../db/schema";
-import { buckets, perCaller } from "../limits/gates";
+import { buckets, paced, perCaller } from "../limits/gates";
 import { takeAttachments } from "./attachments";
 import { lookUp } from "./state";
 
@@ -48,7 +48,7 @@ export const reveal = new Hono().post(
   /* No watermark here. There is nothing to flood: a reveal destroys a row rather than
    * making one, and the only thing it can cost the instance beyond a transaction is a
    * secret somebody else was owed, which needs that secret's own link to reach. */
-  perCaller(buckets.reveals),
+  paced(perCaller(buckets.reveals)),
   bodyLimit({
     maxSize: NO_BODY,
     onError: (c) =>

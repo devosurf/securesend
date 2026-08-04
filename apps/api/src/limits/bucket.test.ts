@@ -96,6 +96,41 @@ describe("a token bucket", () => {
 });
 
 /*
+ * Looking without taking, which a route behind more than one limit needs.
+ *
+ * Charging a caller for a request a later limit is about to refuse would leave them
+ * paying for work nobody did, and then being told they are going too fast about it.
+ */
+describe("checking a token bucket", () => {
+  it("says what a take would say", () => {
+    const bucket = tokenBucket({ capacity: 1, refillMs: 60_000 });
+    expect(bucket.check("one", 0)).toStrictEqual({ ok: true });
+
+    bucket.take("one", 0);
+
+    expect(bucket.check("one", 0)).toStrictEqual({ ok: false, retryAfter: 60 });
+  });
+
+  it("takes nothing, however many times it is asked", () => {
+    const bucket = tokenBucket(PACE);
+
+    for (let asked = 0; asked < PACE.capacity * 3; asked += 1) {
+      expect(bucket.check("one", 0).ok).toBe(true);
+    }
+
+    expect(hammer(bucket, "one", 0)).toBe(PACE.capacity);
+  });
+
+  it("holds nobody it has only been asked about", () => {
+    const bucket = tokenBucket(PACE);
+
+    bucket.check("one", 0);
+
+    expect(bucket.size()).toBe(0);
+  });
+});
+
+/*
  * What this forgets, which is the whole of the privacy claim on the security page:
  * anything keyed to an IP address expires within 24 hours.
  *
@@ -158,8 +193,8 @@ describe("a token bucket's memory", () => {
   it("holds no more callers than its ceiling", () => {
     const bucket = tokenBucket(PACE);
 
-    for (let one = 0; one <= MOST_CALLERS; one += 1) {
-      bucket.take(`caller-${one}`, 0);
+    for (let caller = 0; caller <= MOST_CALLERS; caller += 1) {
+      bucket.take(`caller-${caller}`, 0);
     }
 
     expect(bucket.size()).toBeLessThanOrEqual(MOST_CALLERS);
