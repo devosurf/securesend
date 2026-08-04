@@ -61,7 +61,10 @@ export function Shell({
       />
 
       <nav className="relative flex shrink-0 items-center px-5 pt-7 md:px-16 md:pt-10">
-        <Wordmark />
+        {/* The recipient's only way off this page that is not the back button. */}
+        <RouteLink to="/" tone="quiet" viewTransition>
+          <Wordmark />
+        </RouteLink>
       </nav>
 
       <main

@@ -434,7 +434,9 @@ function Page() {
       />
 
       <nav className="relative flex shrink-0 items-center justify-between px-5 pt-7 md:px-16 md:pt-10">
-        <Wordmark />
+        <RouteLink to="/" tone="quiet" viewTransition>
+          <Wordmark />
+        </RouteLink>
         <div className="flex items-center gap-8">
           <RouteLink
             className="text-small"
