@@ -215,9 +215,9 @@ describe("POST /api/secrets/:id/reveal, with files", () => {
   });
 
   /* Expiry is a timestamp comparison on every read, so a clock running out is
-   * enough to refuse the press. Clearing the row out afterwards is the sweep's
-   * job and the sweep does not exist yet, for envelopes either: what this pins is
-   * that nothing is released, not that the files are meant to sit there. */
+   * enough to refuse the press. Clearing the row out afterwards is the janitor's
+   * job, and the point of pinning it from this end is that the two are
+   * independent: what refuses the press is the clock, not the sweep having run. */
   it("releases nothing from an expired secret, files included", async () => {
     const sealed = await seal("24h", 2);
     await expire(sealed.id);

@@ -110,6 +110,17 @@ export async function expire(id: string): Promise<void> {
     .where(eq(secrets.id, id));
 }
 
+/**
+ * Puts a secret's expiry a whole number of days in the past, which is how a test walks
+ * up to the tombstone window without waiting a week for it.
+ */
+export async function expiredDaysAgo(id: string, days: number): Promise<void> {
+  await db
+    .update(secrets)
+    .set({ expiresAt: sql`now() - make_interval(days => ${days}, mins => 1)` })
+    .where(eq(secrets.id, id));
+}
+
 /** The day's counter for one of the four things worth counting. */
 export async function countToday(name: Counted): Promise<number> {
   const [today] = await db
