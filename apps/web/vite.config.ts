@@ -11,13 +11,18 @@ const API_PORT = 3000;
 /*
  * The two pages that are prerendered, and what each one is called.
  *
- * The title lives here rather than in the route file because it is build output:
- * the running app never changes it, and a static page that has to boot
- * JavaScript to name itself is not really static. Each title is the page's own
- * heading, word for word. Nothing here invents copy: what a page says about
- * itself is the design's to decide, not the build's.
+ * The title and the description live here rather than in the route file because
+ * they are build output: the running app never changes them, and a static page
+ * that has to boot JavaScript to name itself is not really static. Both are the
+ * page's own words, verbatim: the title is its heading, the description is the
+ * heading and the sentence under it. Nothing here invents copy: what a page says
+ * about itself is the design's to decide, not the build's.
+ *
+ * Only these two carry a description, because only these two are meant to be
+ * found. Every other route is a secret's address and says noindex instead.
  */
 interface Page {
+  description: string;
   file: string;
   /** The route to render. */
   path: string;
@@ -25,8 +30,16 @@ interface Page {
 }
 
 const PAGES: readonly Page[] = [
-  { file: "index.html", path: "/", title: "SecureSend" },
   {
+    description:
+      "Send a secret that disappears. Type it, paste it, or drop a file in. It's locked in this browser before it goes anywhere.",
+    file: "index.html",
+    path: "/",
+    title: "SecureSend",
+  },
+  {
+    description:
+      "How this actually works: the mechanism, the limits, and the things we are not claiming. Written to be checked against the source rather than believed.",
     file: "security.html",
     path: "/security",
     title: "How this actually works",
@@ -56,20 +69,22 @@ function titled(template: string, title: string) {
   return template.replace(TITLE, `<title>${escapeAttribute(title)}</title>`);
 }
 
+/** One more tag in the head, indented the way the template's own tags are. */
+function inHead(template: string, tag: string) {
+  return template.replace(HEAD_END, `  ${tag}\n  ${HEAD_END}`);
+}
+
 function page(template: string, spec: Page, markup: string) {
-  return titled(template, spec.title).replace(
-    ROOT_DIV,
-    `<div id="root">${markup}</div>`
-  );
+  return inHead(
+    titled(template, spec.title),
+    `<meta content="${escapeAttribute(spec.description)}" name="description">`
+  ).replace(ROOT_DIV, `<div id="root">${markup}</div>`);
 }
 
 function shell(template: string) {
   // The header says noindex too. Saying it in the document as well means a proxy
   // that strips headers cannot quietly put a secret's address in an index.
-  return template.replace(
-    HEAD_END,
-    `  <meta content="noindex" name="robots">\n  ${HEAD_END}`
-  );
+  return inHead(template, '<meta content="noindex" name="robots">');
 }
 
 /**

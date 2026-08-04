@@ -1,0 +1,5 @@
+# A secret's address is not for an index. The instance says so in a header on
+# every /s/ response and in the document itself; this is the third place, for a
+# crawler that reads only this file.
+User-agent: *
+Disallow: /s/
