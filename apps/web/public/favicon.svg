@@ -1,9 +1,18 @@
-<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+<svg
+  height="32"
+  viewBox="0 0 32 32"
+  width="32"
+  xmlns="http://www.w3.org/2000/svg"
+>
   <title>SecureSend</title>
   <!--
-    The brand mark, same path as src/ui/wordmark.tsx. The fill is the accent
-    token spelled out because a static icon has no stylesheet to read it from:
-    if --color-accent moves, move it here too.
+    The brand mark, same path as src/ui/wordmark.tsx. The accent colour is
+    spelled out because a static icon has no stylesheet to read a token from:
+    if the accent moves, move it here too.
+
+    Careful with comments in here: XML forbids a double hyphen inside one, so
+    writing a CSS custom property by name makes this file malformed and it
+    stops decoding as an image while still serving as valid bytes.
   -->
   <path
     d="M3 4C12 8 22 9 29 4C27 11 25 14 22 14L17 14C17 19 18 23 11 29C13 21 8 11 3 4Z"
