@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
+import { compress } from "hono/compress";
 import { createMiddleware } from "hono/factory";
 import { db } from "./db/client";
 import { securityHeaders } from "./headers";
@@ -48,9 +49,28 @@ const api = new Hono()
   .route("/secrets", reveal)
   .route("/secrets", burn);
 
-// The bundle is first in the chain, so it rides every response the process can
-// make: the api, the static build, and the 404s.
-const app = new Hono().use("*", securityHeaders).route("/api", api);
+/*
+ * The two things every response goes through, in this order.
+ *
+ * The header bundle is first, so it rides every response the process can make: the
+ * api, the static build, and the 404s. A header that only appears on the routes we
+ * remembered is a header nobody can verify.
+ *
+ * Compression is second, and it is here rather than left to a proxy because a
+ * self-hoster's whole deployment is this container. The documents and the bundle are
+ * a few hundred kilobytes of markup, css and javascript; sending them raw costs a
+ * phone about two seconds of the page's arrival, and nothing about doing it here is
+ * a proxy's job this process cannot do.
+ *
+ * Hono skips what must not be touched: a range response, anything already encoded, a
+ * HEAD, and anything under a kilobyte. Ciphertext is json and so is compressed too,
+ * which is safe because the whole response is one secret's bytes: there is no
+ * attacker-chosen text sharing the stream for a length to leak anything about.
+ */
+const app = new Hono()
+  .use("*", securityHeaders)
+  .use("*", compress())
+  .route("/api", api);
 
 export type AppType = typeof app;
 
