@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LINKS } from "../../apps/web/src/lib/links";
 import {
   bannedClaims,
+  describedAs,
   documentedVariables,
   type Finding,
   inlineCode,
@@ -55,8 +56,11 @@ const WEB_DIST = join(ROOT, "apps/web/dist");
 /** The only place the process may read its environment. */
 const ENV_MODULE = ["apps/api/src/env.ts"] as const;
 
-/** The three documents the api serves: two prerendered pages and the empty shell. */
-const DOCUMENTS = ["index.html", "security.html", "shell.html"] as const;
+/** The two pages meant to be found, which are the two carrying a description. */
+const PAGES = ["index.html", "security.html"] as const;
+
+/** The three documents the api serves: the two pages and the empty shell. */
+const DOCUMENTS = [...PAGES, "shell.html"] as const;
 
 /** A secret link, key and all, in a file the build wrote. */
 const BAKED_FRAGMENT = /\/s\/[\w-]+#/;
@@ -210,6 +214,25 @@ describe("what the surfaces claim", () => {
     expect(report(findings)).toEqual([]);
   });
 
+  it("makes no claim we are not allowed to make, in what a page says about itself", () => {
+    /* The description is the one line of copy a reader never sees on the page and a
+     * search result quotes back whole. It rides in an attribute, so visibleText drops
+     * it, and it is written by the build rather than by a route, so it is outside every
+     * directory the checks above read as source. Both halves of the rule apply to it. */
+    const described = documents.flatMap(({ path, text }) =>
+      describedAs(text).map((said) => ({ path, said }))
+    );
+
+    expect(described.length, "no page describes itself").toBe(PAGES.length);
+
+    const findings = described.flatMap(({ path, said }) => [
+      ...bannedClaims(path, said),
+      ...unlabelledClaims(path, said),
+    ]);
+
+    expect(report(findings)).toEqual([]);
+  });
+
   it("makes no claim we are not allowed to make, in the copy that never prerenders", async () => {
     /* The recipient's whole side is client-rendered, so its dead ends and its
      * sealed panel are not in any document the build wrote. Their words are still
@@ -253,7 +276,7 @@ describe("the url fragment", () => {
 describe("the headers on a built instance", () => {
   const PUBLIC = join(ROOT, "apps/api/public");
   let staged = false;
-  let request: (path: string) => Promise<Response>;
+  let request: (path: string, init?: RequestInit) => Promise<Response>;
   let close: () => Promise<void>;
 
   beforeAll(async () => {
@@ -272,7 +295,8 @@ describe("the headers on a built instance", () => {
       import("../../apps/api/src/db/client"),
     ]);
 
-    request = async (path: string) => await app.request(path);
+    request = async (path: string, init?: RequestInit) =>
+      await app.request(path, init);
     close = closeDatabase;
   });
 
@@ -336,6 +360,34 @@ describe("the headers on a built instance", () => {
     const response = await request("/api/secrets/7hK2mQ");
 
     expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  /*
+   * The instance compresses what it serves, which is a claim the changelog makes and
+   * the one thing here a reader would notice going wrong rather than read about.
+   *
+   * It is checked on the real documents because they are the only responses this
+   * process makes that are big enough for it to apply to: Hono leaves anything under
+   * a kilobyte alone, so every route the api's own tests reach is skipped by design.
+   * And the bytes are decompressed rather than the header trusted, because a header
+   * naming an encoding that is not there is worse than no header.
+   */
+  it("compresses what it serves", async () => {
+    const response = await request("/", {
+      headers: { "accept-encoding": "gzip" },
+    });
+    const { body } = response;
+
+    expect(response.headers.get("content-encoding")).toBe("gzip");
+    if (!body) {
+      throw new Error("the homepage came back with no body");
+    }
+
+    const unpacked = await new Response(
+      body.pipeThrough(new DecompressionStream("gzip"))
+    ).text();
+
+    expect(unpacked).toContain("Send a secret");
   });
 
   it("serves the built assets from this origin", async () => {

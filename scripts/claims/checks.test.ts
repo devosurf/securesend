@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bannedClaims,
+  describedAs,
   documentedVariables,
   type Finding,
   inlineCode,
@@ -260,6 +261,45 @@ describe("what a reader sees", () => {
     expect(whats(bannedClaims("seeded", withoutComments(source)))).toEqual([
       'claims "100% secure"',
     ]);
+  });
+});
+
+describe("what a page says about itself", () => {
+  it("reads a description out of the head, in either attribute order", () => {
+    const html =
+      '<meta content="Send a secret." name="description">' +
+      '<meta name="description" content="And again.">';
+
+    expect(describedAs(html)).toEqual(["Send a secret.", "And again."]);
+  });
+
+  it("leaves every other meta tag alone", () => {
+    const html =
+      '<meta content="noindex" name="robots">' +
+      '<meta content="width=device-width" name="viewport">';
+
+    expect(describedAs(html)).toEqual([]);
+  });
+
+  it("catches a claim a reader never sees, which is what this is for", () => {
+    // visibleText throws the tag away, so without describedAs this line is the one
+    // surface search results quote and the one surface nothing checks.
+    const html = '<meta content="Bank-grade security." name="description">';
+
+    expect(visibleText(html)).not.toContain("Bank-grade");
+    expect(
+      whats(describedAs(html).flatMap((said) => bannedClaims("seeded", said)))
+    ).toEqual(['claims "bank-grade"']);
+  });
+
+  it("holds a description to the caveat like any other copy", () => {
+    const html = '<meta content="End-to-end encrypted." name="description">';
+
+    expect(
+      whats(
+        describedAs(html).flatMap((said) => unlabelledClaims("seeded", said))
+      )
+    ).toEqual(['says "End-to-end" out of sight of the caveat']);
   });
 });
 

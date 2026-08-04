@@ -130,6 +130,23 @@ export function visibleText(html: string): string {
     .replaceAll(WHITESPACE_RUN, " ");
 }
 
+/** `<meta name="description" content="...">`, in either attribute order. */
+const DESCRIPTION =
+  /<meta\b(?=[^>]*\bname="description")[^>]*\bcontent="([^"]*)"/gi;
+
+/**
+ * What a page says about itself out of a reader's sight.
+ *
+ * A description is copy like any other and the claims rule binds it, but it rides in
+ * an attribute, so `visibleText` throws it away with the tag around it. Without this,
+ * the one line search results quote back is the one line the audit cannot read. It
+ * also comes from the build rather than from a route file, which puts it outside every
+ * directory the audit reads as source.
+ */
+export function describedAs(html: string): string[] {
+  return matches(html, DESCRIPTION);
+}
+
 /**
  * Source with its comments removed, because a comment is not a claim.
  *
