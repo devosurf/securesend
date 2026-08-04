@@ -23,6 +23,7 @@ const ORIGIN = "https://securesend.dev";
 const CREATED = 201;
 const CONFLICT = 409;
 const TOO_LARGE = 413;
+const TOO_MANY = 429;
 const SERVER_ERROR = 500;
 
 /** The iv's length in base64url characters, which the api's schema fixes. */
@@ -279,6 +280,81 @@ describe("sealAndSend", () => {
     ).catch((error: unknown) => error)) as SendFailedError;
 
     expect(failure.problem).toBe("refused");
+  });
+
+  /*
+   * The two paces, told apart, because one asks the sender to slow down and the other
+   * says it is not about them. Getting this backwards would blame somebody for the
+   * instance being full, which is the one thing a refusal here must not do.
+   */
+  it("says too fast when this caller is the one at their limit", async () => {
+    const { world } = around(() =>
+      Response.json(
+        { error: "not that fast", retryAfter: 42, scope: "ip" },
+        { status: TOO_MANY }
+      )
+    );
+
+    const failure = (await sealAndSend(
+      { expiry: "24h", note: "hi" },
+      world
+    ).catch((error: unknown) => error)) as SendFailedError;
+
+    expect(failure.problem).toBe("too-fast");
+    expect(failure.retryAfter).toBe(42);
+  });
+
+  it("says the instance is busy when the instance is the one at its limit", async () => {
+    const { world } = around(() =>
+      Response.json(
+        { error: "at its limit", retryAfter: 7, scope: "instance" },
+        { status: TOO_MANY }
+      )
+    );
+
+    const failure = (await sealAndSend(
+      { expiry: "24h", note: "hi" },
+      world
+    ).catch((error: unknown) => error)) as SendFailedError;
+
+    expect(failure.problem).toBe("instance-busy");
+    expect(failure.retryAfter).toBe(7);
+  });
+
+  /* A 429 can come from a proxy in front of the instance, which knows nothing about
+   * this product's shapes. The wait still comes off the standard header, and an
+   * unreadable body takes the blame rather than handing it to the sender. */
+  it("takes the wait from the header when the body says nothing", async () => {
+    const { world } = around(
+      () =>
+        new Response("<html>too many requests</html>", {
+          headers: { "retry-after": "90" },
+          status: TOO_MANY,
+        })
+    );
+
+    const failure = (await sealAndSend(
+      { expiry: "24h", note: "hi" },
+      world
+    ).catch((error: unknown) => error)) as SendFailedError;
+
+    expect(failure.problem).toBe("instance-busy");
+    expect(failure.retryAfter).toBe(90);
+  });
+
+  it("keeps the secret in this tab when it is refused for pace", async () => {
+    const { server, storage, world } = around(() =>
+      Response.json({ retryAfter: 30, scope: "ip" }, { status: TOO_MANY })
+    );
+
+    await expect(
+      sealAndSend({ expiry: "24h", note: "hi" }, world)
+    ).rejects.toThrow();
+
+    // Nothing was stored anywhere, so there is nothing to burn and nothing to watch:
+    // the sender still holds the only copy and pressing again is the whole recovery.
+    expect(storage.held.size).toBe(0);
+    expect(server.asked).toHaveLength(1);
   });
 
   it("says nothing answered when nothing answers", async () => {

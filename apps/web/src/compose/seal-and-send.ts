@@ -1,6 +1,7 @@
 import { type FileToSeal, sealEnvelope } from "@securesend/crypto/envelope";
 import type { InferRequestType } from "hono/client";
 import { apiClient, type ClientOptions } from "../api/client";
+import { readRefusal, TOO_MANY } from "../api/refusal";
 import { browserMemory, type Kept, remember } from "./remember";
 
 /*
@@ -71,6 +72,10 @@ const utf8 = new TextEncoder();
  * text, take a file off, take several off. One sentence covering all three would
  * tell a sender who attached a disk image to shorten their note.
  *
+ * Two are about pace, and they are separate for the same reason: one asks the sender
+ * to slow down and the other tells them it is not about them. Both have waiting as
+ * the way out, and the instance says how long.
+ *
  * The last one is the composer's rather than this module's: a file can fail to be
  * read before there is anything to send. It lives here because the screen has one
  * slot for saying nothing happened, and two vocabularies for that slot would be
@@ -80,6 +85,8 @@ export type SendProblem =
   | "too-big"
   | "files-too-big"
   | "too-many-files"
+  | "too-fast"
+  | "instance-busy"
   | "refused"
   | "unreachable"
   | "unreadable-file";
@@ -87,22 +94,26 @@ export type SendProblem =
 export interface SendFailure extends ErrorOptions {
   /** The cap that was hit, whoever refused it for: bytes, or files for a count. */
   limit?: number | undefined;
+  /** Whole seconds the instance asked for, when waiting is the way out. */
+  retryAfter?: number | undefined;
 }
 
 /**
- * Why the secret was not sent, in the three shapes a sender can be told about.
- * Nothing narrower, because there is nothing narrower this browser knows: the
- * instance does not say why it refused, and it should not.
+ * Why the secret was not sent, in the shapes a sender can be told about. Nothing
+ * narrower, because there is nothing narrower this browser knows: the instance says
+ * a cap or a pace and never anything about the envelope, and it should not.
  */
 export class SendFailedError extends Error {
   problem: SendProblem;
   limit: number | undefined;
+  retryAfter: number | undefined;
 
   constructor(problem: SendProblem, failure: SendFailure = {}) {
     super(`the secret was not sent: ${problem}`, failure);
     this.name = "SendFailedError";
     this.limit = failure.limit;
     this.problem = problem;
+    this.retryAfter = failure.retryAfter;
   }
 }
 
@@ -259,6 +270,17 @@ export async function sealAndSend(
     if (response.status === TOO_LARGE) {
       const said: unknown = await response.json().catch(() => null);
       throw new SendFailedError("too-big", { limit: limitFrom(said) });
+    }
+
+    /* Nothing was stored, so nothing was shared and the secret is still in this tab.
+     * Which of the two sentences the sender reads depends on whose limit it was, and
+     * that is the instance's to say rather than this browser's to guess. */
+    if (response.status === TOO_MANY) {
+      const refusal = await readRefusal(response);
+      throw new SendFailedError(
+        refusal.scope === "ip" ? "too-fast" : "instance-busy",
+        { retryAfter: refusal.retryAfter }
+      );
     }
 
     if (response.status !== CREATED) {

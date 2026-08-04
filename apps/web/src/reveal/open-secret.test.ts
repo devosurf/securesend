@@ -18,6 +18,7 @@ const ID = newSecretId();
 const ORIGIN = "https://securesend.dev";
 const NOT_FOUND = 404;
 const GONE = 410;
+const TOO_MANY = 429;
 const SERVER_ERROR = 500;
 
 const CREATED = "2026-08-03T12:00:00.000Z";
@@ -213,6 +214,23 @@ describe("lookUp", () => {
 
     expect((await lookUp(ID, server)).state).toBe("unreachable");
   });
+
+  /* Refused for pace, which is neither a dead link nor an instance that could not be
+   * reached: it answered, immediately, and what it said was not this often. Borrowing
+   * "check your connection" for it would send somebody to fix a working connection. */
+  it("says too fast when the instance is metering, and carries the wait", async () => {
+    const server = instance(() =>
+      Response.json(
+        { error: "not that fast", retryAfter: 12, scope: "ip" },
+        { status: TOO_MANY }
+      )
+    );
+
+    const arrival = await lookUp(ID, server);
+
+    expect(arrival.state).toBe("too-fast");
+    expect(arrival.retryAfter).toBe(12);
+  });
 });
 
 describe("spend", () => {
@@ -283,6 +301,23 @@ describe("spend", () => {
     const spent = await spend(ID, offline);
 
     expect(spent.status).toBe("unreachable");
+  });
+
+  /* The one refused press that costs nothing. It never reached the claim, so the link
+   * is untouched, and reporting it as a dead end would destroy a live secret on screen
+   * while the instance still held it. */
+  it("says too fast without spending anything, and carries the wait", async () => {
+    const server = instance(() =>
+      Response.json(
+        { error: "not that fast", retryAfter: 30, scope: "ip" },
+        { status: TOO_MANY }
+      )
+    );
+
+    const spent = await spend(ID, server);
+
+    expect(spent.status).toBe("too-fast");
+    expect(spent.status === "too-fast" && spent.retryAfter).toBe(30);
   });
 
   it("hands back the attachments that came with the envelope", async () => {

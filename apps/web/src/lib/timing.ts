@@ -55,6 +55,40 @@ export function since(iso: string, now = Date.now()): string {
 }
 
 /**
+ * How long to wait, as a whole phrase, for the one thing in this product that asks
+ * somebody to come back later.
+ *
+ * This one rounds up where the two above round down, and for the same reason both of
+ * them round down: never say the thing that reads as a promise and then breaks. A clock
+ * saying 23 hours left has to still be there in 23 hours. A wait saying a few seconds
+ * when it is really half a minute sends somebody back to be refused again.
+ *
+ * The number is the instance's, so the units go all the way up: an operator who set the
+ * pace to one an hour has an instance that means it, and "about 60 minutes" would be
+ * this app dressing that up.
+ */
+export function inAbout(seconds: number): string {
+  /** Short enough that a number would be false precision on a wait nobody times. */
+  const A_FEW_SECONDS = 20;
+  /** Under this, "about a minute" is nearer than any whole number of minutes. */
+  const NEARLY_TWO_MINUTES = 90;
+  const MINUTES_IN_AN_HOUR = 60;
+
+  if (seconds <= A_FEW_SECONDS) {
+    return "a few seconds";
+  }
+  if (seconds < NEARLY_TWO_MINUTES) {
+    return "about a minute";
+  }
+
+  const minutes = Math.ceil(seconds / 60);
+
+  return minutes < MINUTES_IN_AN_HOUR
+    ? `about ${count(minutes, "minute")}`
+    : `about ${count(Math.ceil(minutes / MINUTES_IN_AN_HOUR), "hour")}`;
+}
+
+/**
  * Which of the three expiries a secret was created with, said the way the sender
  * chose it. Derived from the two timestamps rather than stored, because the instance
  * has no reason to keep the preset once it has a deadline, and the nearest of three

@@ -1,4 +1,4 @@
-import { preset, since } from "../lib/timing";
+import { inAbout, preset, since } from "../lib/timing";
 import { Badge } from "../ui/badge";
 import { LinkSpecimen } from "../ui/link-specimen";
 import { Panel } from "../ui/panel";
@@ -6,8 +6,8 @@ import type { Answered } from "./open-secret";
 import { DeadEnd } from "./shell";
 
 /*
- * The six ways this page has nothing to give, worded so that a dead link tells the
- * truth and says what to do next.
+ * The ways this page has nothing to give, worded so that a dead link tells the truth
+ * and says what to do next.
  *
  * Four of them are dead because the product worked exactly as promised, and they are
  * written that way: calm, never red, no apology for a design doing its job. `expired`
@@ -16,9 +16,11 @@ import { DeadEnd } from "./shell";
  * set, the only good news here: the link is broken and the secret is fine, which is
  * why its badge is live and teal on a screen whose headline names a failure.
  *
- * Two are new, because a frame cannot fail. `unreachable` is a page that could not
- * ask, and calling that a dead secret would be a guess dressed as a fact.
- * `unreadable` is the press having worked and the key not fitting what came back.
+ * Three are not in the frames, because a frame cannot fail. `unreachable` is a page
+ * that could not ask, and calling that a dead secret would be a guess dressed as a
+ * fact. `too-fast` is the instance being there and declining to be asked this often,
+ * which is neither of those two and must not borrow either one's words. `unreadable`
+ * is the press having worked and the key not fitting what came back.
  */
 
 const NAMES = [
@@ -28,13 +30,14 @@ const NAMES = [
   "missing",
   "incomplete",
   "unreachable",
+  "too-fast",
   "unreadable",
 ] as const;
 
 export type DeadEndName = (typeof NAMES)[number];
 
 /**
- * Which dead end a screen is, for a caller whose state is wider than these seven.
+ * Which dead end a screen is, for a caller whose state is wider than these eight.
  *
  * `unreadable` is the fallback rather than a case of its own, because it is the only
  * honest thing left to say about a screen nothing above matched: the press happened and
@@ -214,6 +217,30 @@ function Unreachable() {
 }
 
 /*
+ * The instance answered, and what it answered was "not this often".
+ *
+ * Distinct from `unreachable` on purpose, because the two are the opposite fault and
+ * have opposite ways out. Nothing answered means check your connection. This means the
+ * connection is fine and the instance is metering, so the only useful instruction is a
+ * number, and it is the instance's number rather than one invented here.
+ *
+ * There is no bot check and no account anywhere in this product, so per-caller limits
+ * are the whole of how abuse costs are bounded, which makes this a screen an ordinary
+ * person genuinely reaches: an office behind one address, a phone on carrier NAT. No
+ * badge, for the same reason `unreachable` has none. Nothing was asked, so there is no
+ * state to name, and the one thing this page can be certain of goes in the body.
+ */
+function TooFast({ retryAfter }: { retryAfter: number }) {
+  return (
+    <DeadEnd
+      body="This instance limits how often it answers, and this arrived over that. Nothing has been opened and nothing has been spent: the secret is exactly as the sender left it."
+      footnote={`Load the link again in ${inAbout(retryAfter)}.`}
+      heading="This page couldn't ask yet."
+    />
+  );
+}
+
+/*
  * The press worked and the key did not fit what came back.
  *
  * A fragment can be damaged in a way the reader cannot see, because the token format
@@ -235,9 +262,11 @@ function Unreadable() {
 export function DeadEndScreen({
   answered,
   name,
+  retryAfter,
 }: {
   answered: Answered | null;
   name: DeadEndName;
+  retryAfter: number;
 }) {
   if (name === "used") {
     return <Used answered={answered} />;
@@ -256,6 +285,9 @@ export function DeadEndScreen({
   }
   if (name === "unreachable") {
     return <Unreachable />;
+  }
+  if (name === "too-fast") {
+    return <TooFast retryAfter={retryAfter} />;
   }
 
   return <Unreadable />;

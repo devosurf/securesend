@@ -85,6 +85,9 @@ export type Handoff = "idle" | "shared" | "copied";
  */
 const LOCK_FLOOR_MS = 410;
 
+/** What to say to wait when a refusal carried no number of its own. */
+const A_MINUTE_S = 60;
+
 /**
  * How the receipt says an expiry, so it says it the way the setting did. Typed
  * against the api's three presets, so one added there and not here will not
@@ -152,6 +155,8 @@ export interface Composing {
   removeFile: (id: number) => void;
   removePair: () => void;
   removeSeal: () => void;
+  /** Whole seconds to wait, when waiting is why nothing was sent. */
+  retryAfter: number;
   seal: Seal | null;
   send: () => Promise<void>;
   sendAnother: () => void;
@@ -231,6 +236,13 @@ function limitOf(error: unknown): number {
     : MAX_ENVELOPE_BYTES;
 }
 
+/** What the instance asked for, when it asked for a wait rather than a smaller secret. */
+function waitOf(error: unknown): number {
+  return error instanceof SendFailedError && error.retryAfter !== undefined
+    ? error.retryAfter
+    : A_MINUTE_S;
+}
+
 export function ComposeProvider({ children }: { children: ReactNode }) {
   const atDesk = useAtDesk();
 
@@ -251,6 +263,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
   const [handoff, setHandoff] = useState<Handoff>("idle");
   const [problem, setProblem] = useState<SendProblem | null>(null);
   const [limit, setLimit] = useState(MAX_ENVELOPE_BYTES);
+  const [retryAfter, setRetryAfter] = useState(A_MINUTE_S);
 
   const usernameField = useRef<HTMLInputElement>(null);
   const sealField = useRef<HTMLInputElement>(null);
@@ -340,6 +353,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
       await restOfTheFloor(startedAt);
       setProblem(problemOf(error));
       setLimit(limitOf(error));
+      setRetryAfter(waitOf(error));
     } finally {
       setLocking(false);
     }
@@ -573,6 +587,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
       setSeal((now) => (now ? { ...now, open: false } : now));
       window.setTimeout(() => setSeal(null), SETTLE_MS);
     },
+    retryAfter,
     seal,
     send,
     sendAnother() {

@@ -1,6 +1,7 @@
 import { type ReactNode, useRef } from "react";
 import { useAtDesk } from "../lib/lane";
 import { spokenSize } from "../lib/sizes";
+import { inAbout } from "../lib/timing";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { Collapse } from "../ui/collapse";
@@ -71,7 +72,11 @@ function noteRows(note: string): number {
  * one slot because a sender has one place to look for the answer to "why did that
  * do nothing". What differs is the way out, so each names its own.
  */
-function refusalOf(problem: SendProblem, limit: number): string {
+function refusalOf(
+  problem: SendProblem,
+  limit: number,
+  retryAfter: number
+): string {
   if (problem === "too-big") {
     return `That is more than ${spokenSize(limit)} of text, which is the most one envelope holds. Trim it and try again.`;
   }
@@ -93,6 +98,18 @@ function refusalOf(problem: SendProblem, limit: number): string {
 
   if (problem === "unreachable") {
     return "Nothing answered, so nothing was sent. Check your connection and press Create link again.";
+  }
+
+  /* The two paces. There is no bot check and no account anywhere in this product, so
+   * per-caller limits are how abuse costs are bounded, and an office behind one address
+   * will meet one honestly. Both say the wait rather than "in a moment", because the
+   * instance knows the number and a vague one sends somebody back to be refused. */
+  if (problem === "too-fast") {
+    return `That is more links than this instance takes from one place that quickly, so nothing was sent. Nothing has been shared. Try again in ${inAbout(retryAfter)}.`;
+  }
+
+  if (problem === "instance-busy") {
+    return `This instance is at its limit for now, so nothing was sent. That is not about you, and nothing has been shared. Try again in ${inAbout(retryAfter)}.`;
   }
 
   return "This instance would not take it, so nothing was sent and nothing was shared.";
@@ -152,14 +169,14 @@ function SealRow() {
 }
 
 function Refusal() {
-  const { limit, problem } = useComposing();
+  const { limit, problem, retryAfter } = useComposing();
 
   /* The sentence outlives the state that made it, so the slot has something to say
    * on the way shut. Reading the live problem instead would swap the sentence for
    * the fallback one for the length of the close. */
   const said = useRef("");
   if (problem) {
-    said.current = refusalOf(problem, limit);
+    said.current = refusalOf(problem, limit, retryAfter);
   }
 
   return (

@@ -9,6 +9,7 @@ import {
   type FragmentToken,
 } from "@securesend/crypto/fragment";
 import { apiClient, type ClientOptions } from "../api/client";
+import { readRefusal, TOO_MANY } from "../api/refusal";
 import { readAnswer, type SecretState, type SecretTimes } from "../api/status";
 
 /*
@@ -58,13 +59,20 @@ export interface Address {
 }
 
 /** What the instance said, or what this browser found out instead. */
-export type ArrivalState = SecretState | "missing" | "unreachable";
+export type ArrivalState =
+  | SecretState
+  | "missing"
+  | "unreachable"
+  /** The instance is there and would not answer this fast. Nothing was spent. */
+  | "too-fast";
 
 export type Answered = SecretTimes;
 
 export interface Arrival {
-  /** Absent for the two states the instance never answered at all. */
+  /** Absent for the three states the instance never answered a status at all. */
   answered?: Answered | undefined;
+  /** Whole seconds the instance asked for, on `too-fast` and nothing else. */
+  retryAfter?: number | undefined;
   state: ArrivalState;
 }
 
@@ -80,7 +88,9 @@ export type Spent =
   /** The press landed on something already dead. The page says which. */
   | { status: "gone"; arrival: Arrival }
   /** Nothing answered, so nothing was spent and the press can happen again. */
-  | { status: "unreachable" };
+  | { status: "unreachable" }
+  /** The instance would not take it this fast. Nothing was spent either. */
+  | { status: "too-fast"; retryAfter: number };
 
 export type Unsealed =
   | { status: "open"; secret: OpenedEnvelope }
@@ -154,6 +164,14 @@ export async function lookUp(
     return { state: "missing" };
   }
 
+  /* Refused for pace, which is not a dead link and not an unreachable instance: the
+   * instance is right there and declining to be asked this often. Nothing was spent
+   * finding out, because a lookup never spends anything. */
+  if (response.status === TOO_MANY) {
+    const { retryAfter } = await readRefusal(response);
+    return { retryAfter, state: "too-fast" };
+  }
+
   const said: unknown = await response.json().catch(() => null);
 
   return response.status === OK ? arrivalOf(said) : { state: "unreachable" };
@@ -182,6 +200,13 @@ export async function spend(
 
   if (response.status === NOT_FOUND) {
     return { arrival: { state: "missing" }, status: "gone" };
+  }
+
+  /* The one refusal that costs nothing. The press never reached the claim, so the link
+   * is exactly as it was and the same button spends it a minute from now. */
+  if (response.status === TOO_MANY) {
+    const { retryAfter } = await readRefusal(response);
+    return { retryAfter, status: "too-fast" };
   }
 
   const said: unknown = await response.json().catch(() => null);

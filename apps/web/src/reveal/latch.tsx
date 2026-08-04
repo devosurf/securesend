@@ -1,6 +1,6 @@
 import { type ReactNode, type RefObject, useEffect, useRef } from "react";
 import { useAtDesk } from "../lib/lane";
-import { until } from "../lib/timing";
+import { inAbout, until } from "../lib/timing";
 import { cn } from "../lib/utils";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -8,7 +8,7 @@ import { Collapse } from "../ui/collapse";
 import { Icon } from "../ui/icon";
 import { Panel } from "../ui/panel";
 import { PasswordRow } from "../ui/password-row";
-import type { Revealing } from "./revealing";
+import type { NothingHappened, Revealing } from "./revealing";
 
 /*
  * The latch, and the retry it can turn into.
@@ -329,23 +329,52 @@ function Counted({
   );
 }
 
+/*
+ * A press that changed nothing, in the two shapes there are of that.
+ *
+ * Both end the same way and that is the point of putting them here rather than on a
+ * screen of their own: the link was not spent, so the button that failed is still the
+ * button, still says what it does, and pressing it again is the whole recovery.
+ *
+ * They are two sentences because the way out differs. Nothing answering is the
+ * recipient's connection to check. Being metered is the instance's number to wait out,
+ * and saying "nothing answered" about an instance that answered instantly would be the
+ * one screen on this page whose job is to be believed telling a small lie.
+ */
+function nothingHappenedIs(
+  reason: NothingHappened,
+  retryAfter: number
+): string {
+  return reason === "no-answer"
+    ? "Nothing answered, so nothing was spent. Check your connection and press Open it once again."
+    : `This instance limits how often it answers, so nothing was spent. Press Open it once again in ${inAbout(retryAfter)}.`;
+}
+
 export function Latch({ revealing }: { revealing: Revealing }) {
   const {
     answered,
     busy,
     needsPassword,
+    nothingHappened,
     openIt,
     password,
+    retryAfter,
     screen,
     setPassword,
     tries,
     tryAgain,
-    unreached,
   } = revealing;
 
   const atDesk = useAtDesk();
   const field = useRef<HTMLInputElement>(null);
   const spent = screen === "retry";
+
+  /* The sentence outlives the reason that made it, so the slot has something to say on
+   * the way shut, the same way the composer's refusal does. */
+  const said = useRef("");
+  if (nothingHappened) {
+    said.current = nothingHappenedIs(nothingHappened, retryAfter);
+  }
 
   /* Arriving in retry puts the caret where the next try goes. */
   useEffect(() => {
@@ -403,13 +432,10 @@ export function Latch({ revealing }: { revealing: Revealing }) {
           </Collapse>
         ) : null}
 
-        {/* A press that reached nothing. The link is untouched, which is the whole
+        {/* A press that changed nothing. The link is untouched, which is the whole
          * point of saying so: the same button tries again. */}
-        <Collapse open={unreached}>
-          <p className={cn(CONSEQUENCE, "pt-3")}>
-            Nothing answered, so nothing was spent. Check your connection and
-            press Open it once again.
-          </p>
+        <Collapse open={nothingHappened !== null}>
+          <p className={cn(CONSEQUENCE, "pt-3")}>{said.current}</p>
         </Collapse>
       </div>
     </div>

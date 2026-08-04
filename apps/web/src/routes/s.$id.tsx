@@ -43,7 +43,7 @@ export const Route = createFileRoute("/s/$id")({
 const LIVE = ["sealed", "retry", "open"];
 
 function Body({ revealing }: { revealing: Revealing }) {
-  const { answered, screen, secret } = revealing;
+  const { answered, retryAfter, screen, secret } = revealing;
 
   if (screen === "sealed" || screen === "retry") {
     return <Latch revealing={revealing} />;
@@ -64,7 +64,13 @@ function Body({ revealing }: { revealing: Revealing }) {
     return <Saved />;
   }
 
-  return <DeadEndScreen answered={answered} name={deadEndFor(screen)} />;
+  return (
+    <DeadEndScreen
+      answered={answered}
+      name={deadEndFor(screen)}
+      retryAfter={retryAfter}
+    />
+  );
 }
 
 function Reveal() {

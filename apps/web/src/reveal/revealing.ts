@@ -27,6 +27,9 @@ import { allOf } from "./parts";
  * nothing thrown can take the page down while it is the only place the secret lives.
  */
 
+/** What to say to wait for, when a refusal carried no number of its own. */
+const A_MINUTE_S = 60;
+
 export type Screen =
   /** Asking the instance what this link is. One request, and it consumes nothing. */
   | "asking"
@@ -41,8 +44,21 @@ export type Screen =
   | "missing"
   | "incomplete"
   | "unreachable"
+  /** The instance declined to be asked this often. The link is untouched. */
+  | "too-fast"
   /** The link was spent and what came back will not open with the key in it. */
   | "unreadable";
+
+/**
+ * Why a press changed nothing, when one did not.
+ *
+ * Both belong on the latch rather than on a screen of their own, because in both cases
+ * the link is exactly what it was and the button that failed is still the button: a
+ * page that navigated away from the latch to report them would be taking the retry off
+ * the screen. They are told apart because the way out differs, and because "nothing
+ * answered" said about an instance that answered immediately is simply false.
+ */
+export type NothingHappened = "no-answer" | "too-fast";
 
 export interface Revealing {
   /** The clock the screen quotes, when the instance gave one. */
@@ -51,9 +67,13 @@ export interface Revealing {
   busy: boolean;
   /** Whether this envelope's key is only half of itself. From the link, not the api. */
   needsPassword: boolean;
+  /** A press that changed nothing. Nothing was spent, so it can happen again. */
+  nothingHappened: NothingHappened | null;
   /** The one irreversible act. Spends the link, then opens what came back. */
   openIt: () => Promise<void>;
   password: string;
+  /** Whole seconds the instance asked to be left alone for, when it asked. */
+  retryAfter: number;
   saveIt: () => void;
   screen: Screen;
   /** Present once the envelope is open, and only in this tab. */
@@ -67,8 +87,6 @@ export interface Revealing {
   tries: number;
   /** Opens what this tab holds again, with whatever was typed. No request. */
   tryAgain: () => Promise<void>;
-  /** A press reached nothing. Nothing was spent, so it can happen again. */
-  unreached: boolean;
 }
 
 /*
@@ -107,7 +125,9 @@ export function useRevealing(id: string): Revealing {
   const [tries, setTries] = useState(0);
   const [busy, setBusy] = useState(false);
   const [taken, setTaken] = useState(false);
-  const [unreached, setUnreached] = useState(false);
+  const [nothingHappened, setNothingHappened] =
+    useState<NothingHappened | null>(null);
+  const [retryAfter, setRetryAfter] = useState(A_MINUTE_S);
 
   /* The ciphertext, once the press has taken it, and from then on the only copy of
    * this secret anywhere. Nothing draws it; what it is here for is the retry, which
@@ -142,6 +162,9 @@ export function useRevealing(id: string): Revealing {
         return;
       }
       setAnswered(arrival.answered ?? null);
+      if (arrival.retryAfter !== undefined) {
+        setRetryAfter(arrival.retryAfter);
+      }
       setScreen(arrival.state);
     });
 
@@ -202,14 +225,21 @@ export function useRevealing(id: string): Revealing {
   }
 
   async function spendAndOpen() {
-    setUnreached(false);
+    setNothingHappened(null);
     setBusy(true);
 
     try {
       const spent = await spend(id);
 
       if (spent.status === "unreachable") {
-        setUnreached(true);
+        setNothingHappened("no-answer");
+        return;
+      }
+      /* Refused for pace. The latch stays exactly where it is, because the link does
+       * too: this is the one failed press that costs the recipient nothing at all. */
+      if (spent.status === "too-fast") {
+        setRetryAfter(spent.retryAfter);
+        setNothingHappened("too-fast");
         return;
       }
       if (spent.status === "gone") {
@@ -282,8 +312,10 @@ export function useRevealing(id: string): Revealing {
     answered,
     busy,
     needsPassword,
+    nothingHappened,
     openIt: () => press(spendAndOpen),
     password,
+    retryAfter,
     saveIt: () => setScreen("saved"),
     screen,
     secret,
@@ -292,6 +324,5 @@ export function useRevealing(id: string): Revealing {
     taken,
     tries,
     tryAgain: () => press(openAgain),
-    unreached,
   };
 }
