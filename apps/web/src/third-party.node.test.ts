@@ -34,6 +34,10 @@ const CSS_IMPORT = /@import\s+(?:url\(\s*)?["']([^"']+)["']/g;
 const HTML_SOURCE = /(?:src|href)="([^"]+)"/g;
 /** A JSX style prop, which is what the policy will not run. */
 const STYLE_PROP = /\sstyle=\{/;
+/** The `href` of a `rel="icon"` link, whichever order the attributes sit in. */
+const ICON_HREF = /<link(?=[^>]*rel="[^"]*icon)[^>]*href="([^"]+)"/g;
+/** The body of an XML comment, which has rules the rest of the file does not. */
+const XML_COMMENT = /<!--([\s\S]*?)-->/g;
 
 function targets(source: string, pattern: RegExp) {
   return [...source.matchAll(pattern)].map(([, target]) => target ?? "");
@@ -82,6 +86,49 @@ describe("what the pages load", () => {
     await Promise.all(
       named.map((target) => access(join(WEB, "public", target)))
     );
+  });
+});
+
+describe("the icons the document names", () => {
+  it("ships every one of them", async () => {
+    const html = await readFile(join(WEB, "index.html"), "utf8");
+    const named = targets(html, ICON_HREF);
+
+    expect(named.length).toBeGreaterThan(0);
+
+    await Promise.all(
+      named.map((target) => access(join(WEB, "public", target)))
+    );
+  });
+
+  /*
+   * A tab icon is decoded by an image parser, not by the lenient one a document
+   * gets, so a malformed svg serves as perfectly valid bytes and renders as
+   * nothing at all. XML forbids a double hyphen inside a comment, which is very
+   * easy to write by accident: naming a CSS custom property is enough to do it.
+   * That shipped once and cost a favicon.
+   */
+  it("keeps their comments legal, so they decode as images", async () => {
+    const entries = await readdir(join(WEB, "public"), { recursive: true });
+    const names = entries.map(String).filter((name) => name.endsWith(".svg"));
+
+    expect(names.length).toBeGreaterThan(0);
+
+    const icons = await Promise.all(
+      names.map(async (name) => ({
+        name,
+        text: await readFile(join(WEB, "public", name), "utf8"),
+      }))
+    );
+
+    for (const { name, text } of icons) {
+      for (const [, body] of text.matchAll(XML_COMMENT)) {
+        expect(
+          (body ?? "").includes("--"),
+          `${name} has a double hyphen inside a comment, which makes it malformed`
+        ).toBe(false);
+      }
+    }
   });
 });
 
