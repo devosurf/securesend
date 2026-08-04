@@ -1,0 +1,56 @@
+name: securesend-smoke
+
+# The instance the browser tests drive. It is the same image a self-hoster pulls,
+# built from this working tree, because the last gate before shipping has to be
+# over the artifact rather than over a dev server: `pnpm smoke` brings this up.
+#
+# Nothing here is persisted. The database has no volume, so every run starts with
+# an empty instance and the sender's history, the counters and the tombstones are
+# only ever this run's.
+#
+# The rate limits are lifted, and that is the one thing about this instance that is
+# not what a self-hoster gets. The journeys below all come from one address, and at
+# the shipped 60 creates an hour a developer running the gate a few times in an
+# afternoon would be refused for pace: the gate would be failing for a reason the
+# product does not have. What a caller is told when a limit refuses them is proven
+# at the api seam, on a clock the test hands in, which is the seam that can prove it.
+services:
+  app:
+    image: securesend-smoke
+    build: .
+    environment:
+      DATABASE_URL: postgres://securesend:securesend@db:5432/securesend
+      PORT: 3000
+      CREATE_PER_HOUR: 6000
+      CREATE_BURST: 600
+      REVEAL_PER_HOUR: 6000
+      REVEAL_BURST: 600
+      STATUS_PER_HOUR: 60000
+      STATUS_BURST: 6000
+      INSTANCE_CREATE_PER_HOUR: 60000
+      INSTANCE_CREATE_BURST: 6000
+    ports:
+      # A loopback address, because Web Crypto needs a secure context and
+      # 127.0.0.1 is one without TLS. Not port 3000: `pnpm dev` is there, and a
+      # gate that can silently run against a dev server instead of the container
+      # is not a gate.
+      - "127.0.0.1:3100:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: securesend
+      POSTGRES_PASSWORD: securesend
+      POSTGRES_DB: securesend
+    # In memory, so "nothing is persisted" survives a stop and a start as well as
+    # a teardown. Postgres 18 keeps its data under a version subdirectory of this.
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U securesend -d securesend"]
+      interval: 5s
+      timeout: 5s
+      retries: 10

@@ -11,6 +11,11 @@
 compose*.yaml
 docs
 scripts
+# The browser gate drives the image from outside it.
+e2e
+playwright.config.ts
+playwright-report
+test-results
 README.md
 AGENTS.md
 CHANGELOG.md
