@@ -9,5 +9,10 @@
 .changeset
 .nvmrc
 compose*.yaml
+docs
+scripts
 README.md
 AGENTS.md
+CHANGELOG.md
+CONTRIBUTING.md
+SECURITY.md

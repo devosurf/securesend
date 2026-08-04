@@ -31,6 +31,8 @@ COPY --from=production-deps /app/apps/api/node_modules /app/apps/api/node_module
 COPY --from=build /app/apps/api/dist dist
 COPY --from=build /app/apps/web/dist public
 COPY apps/api/drizzle drizzle
+# The licence travels with the software, because the image is the software.
+COPY LICENSE /app/LICENSE
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
