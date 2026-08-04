@@ -20,6 +20,7 @@ import { burnOne, statusesOf } from "./statuses";
 const ORIGIN = "https://securesend.dev";
 const NOW = Date.parse("2026-08-04T12:00:00.000Z");
 const NOT_FOUND = 404;
+const TOO_MANY = 429;
 const CONFLICT = 409;
 const FORBIDDEN = 403;
 
@@ -87,9 +88,19 @@ async function rowFor(state: string, when?: Record<string, string | null>) {
     Response.json({ secrets: [answer(held.id, state, when)] })
   );
 
-  const [row] = (await statusesOf([held], server, NOW)) ?? [];
+  const [row] = await rowsOf([held], server);
 
   return { held, row };
+}
+
+/** The rows a landed re-check came back with, for a test that is about the rows. */
+async function rowsOf(
+  remembered: Parameters<typeof statusesOf>[0],
+  server: Parameters<typeof statusesOf>[1]
+) {
+  const checked = await statusesOf(remembered, server, NOW);
+
+  return checked.status === "answered" ? checked.rows : [];
 }
 
 describe("statusesOf", () => {
@@ -101,10 +112,10 @@ describe("statusesOf", () => {
       })
     );
 
-    const rows = await statusesOf(remembered, server, NOW);
+    const rows = await rowsOf(remembered, server);
 
     expect(server.asked).toHaveLength(1);
-    expect(rows?.map((row) => row.id)).toStrictEqual(
+    expect(rows.map((row) => row.id)).toStrictEqual(
       remembered.map((held) => held.id)
     );
   });
@@ -112,7 +123,10 @@ describe("statusesOf", () => {
   it("asks nothing at all when this browser remembers nothing", async () => {
     const server = instance(() => Response.json({ secrets: [] }));
 
-    expect(await statusesOf([], server, NOW)).toStrictEqual([]);
+    expect(await statusesOf([], server, NOW)).toStrictEqual({
+      rows: [],
+      status: "answered",
+    });
     expect(server.asked).toHaveLength(0);
   });
 
@@ -193,9 +207,9 @@ describe("statusesOf", () => {
       Response.json({ secrets: [answer(known.id, "used")] })
     );
 
-    const rows = await statusesOf([forgotten, known], server, NOW);
+    const rows = await rowsOf([forgotten, known], server);
 
-    expect(rows?.map((row) => row.id)).toStrictEqual([known.id]);
+    expect(rows.map((row) => row.id)).toStrictEqual([known.id]);
   });
 
   it("shows no row for a state this build has never heard of", async () => {
@@ -207,23 +221,50 @@ describe("statusesOf", () => {
   /*
    * Nothing answering is not the same as nothing being there, and this is the whole
    * reason: the sender's panel is built from what comes back, so an empty list on a
-   * dropped connection would delete their history over a bad second of wifi. Null says
-   * "ask again", an empty list says "you have sent nothing".
+   * dropped connection would delete their history over a bad second of wifi.
+   * "Unreachable" says ask again, an empty list says you have sent nothing.
    */
   it("says nothing answered rather than answering with no rows", async () => {
-    expect(await statusesOf(many(2), offline, NOW)).toBeNull();
+    expect(await statusesOf(many(2), offline, NOW)).toStrictEqual({
+      status: "unreachable",
+    });
   });
 
   it("says nothing answered when the instance answers something unreadable", async () => {
     const server = instance(() => Response.json({ mood: "cryptic" }));
 
-    expect(await statusesOf(many(2), server, NOW)).toBeNull();
+    expect(await statusesOf(many(2), server, NOW)).toStrictEqual({
+      status: "unreachable",
+    });
   });
 
   it("answers with no rows when this browser has sent nothing", async () => {
     const server = instance(() => Response.json({ secrets: [] }));
 
-    expect(await statusesOf([], server, NOW)).toStrictEqual([]);
+    expect(await statusesOf([], server, NOW)).toStrictEqual({
+      rows: [],
+      status: "answered",
+    });
+  });
+
+  /*
+   * Being metered is a third answer, and it has to be: this is the busiest of the gated
+   * routes, so an office behind one address reaches its limit honestly. Folding it into
+   * "nothing answered" would send a sender to check a connection that is fine, and
+   * folding it into an empty list would delete their history for going too fast.
+   */
+  it("says metered when the instance declines to answer this often", async () => {
+    const server = instance(() =>
+      Response.json(
+        { error: "not that fast", retryAfter: 18, scope: "ip" },
+        { status: TOO_MANY }
+      )
+    );
+
+    expect(await statusesOf(many(2), server, NOW)).toStrictEqual({
+      retryAfter: 18,
+      status: "metered",
+    });
   });
 });
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAtDesk } from "../lib/lane";
+import { inAbout } from "../lib/timing";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { Collapse, SETTLE_MS } from "../ui/collapse";
@@ -140,11 +141,19 @@ function OnlyTombstones() {
 }
 
 export function DeviceMemory() {
-  const { freshness, memory, recheck, refresh, rows, trouble } = useWatching();
+  const { freshness, memory, metered, recheck, refresh, rows, trouble } =
+    useWatching();
   const atDesk = useAtDesk();
 
   const [open, setOpen] = useState(false);
   const list = useRef<HTMLDivElement>(null);
+
+  /* The sentence outlives the wait that made it, so the slot has something to say on
+   * the way shut, the same way the composer's refusal does. */
+  const meteredFor = useRef("");
+  if (metered !== null) {
+    meteredFor.current = `This instance limits how often it answers, so these weren't re-checked. Try again in ${inAbout(metered)}.`;
+  }
 
   /*
    * One lookup when this comes into view, which is page load and again after Send
@@ -202,6 +211,13 @@ export function DeviceMemory() {
           </TextAction>
         )}
       </div>
+
+      {/* A re-check that met the instance's limit. The rows above are still true, they
+       * are just as old as the line already says, so this adds the reason and never
+       * takes the list away. */}
+      <Collapse open={metered !== null}>
+        <p className={cn(QUIET, "pt-2")}>{meteredFor.current}</p>
+      </Collapse>
 
       {/* A burn that did not happen. Said once, quietly, and never in red: nothing was
        * destroyed, which is the whole content of the sentence. */}

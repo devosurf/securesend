@@ -1,4 +1,5 @@
 import { apiClient, type ClientOptions } from "../api/client";
+import { readRefusal, TOO_MANY } from "../api/refusal";
 import { readAnswer, type SecretAnswer, type SecretState } from "../api/status";
 import type { SentSecret } from "../compose/remember";
 import { since, until } from "../lib/timing";
@@ -117,24 +118,38 @@ function hostOf(around: ClientOptions): string {
 }
 
 /**
+ * What a re-check came back with, which is three things and not two.
+ *
+ * An empty list is an answer: every id this device remembers is a week past its expiry
+ * and the instance has genuinely forgotten them. Nothing answering is not, because a
+ * re-check that dropped every row on a bad second of wifi would delete a sender's whole
+ * history and take the panel off the page with it.
+ *
+ * And being metered is a third, because this route is the busiest of the gated three: a
+ * homepage asks it once per load, so an office behind one address reaches its limit
+ * honestly. Saying "nothing answered" about an instance that answered instantly would
+ * send somebody to check a connection that is fine.
+ */
+export type Rechecked =
+  | { rows: Watched[]; status: "answered" }
+  | { status: "unreachable" }
+  | { retryAfter: number; status: "metered" };
+
+/**
  * Asks the instance about every id this browser remembers, in one request, and never
  * consumes anything: this is the same public lookup a preview bot lands on.
  *
  * Ids the instance has nothing for come back absent, which is what a row a week past its
  * expiry looks like from here. They are simply not shown, and the sentence under the
  * panel says the forgetting is how the product works.
- *
- * Null is not an empty list. Nothing answering has to be a different answer from nothing
- * being there, because a re-check that dropped every row on a dropped connection would
- * delete a sender's whole history over a bad second of wifi.
  */
 export async function statusesOf(
   remembered: readonly SentSecret[],
   around: ClientOptions = {},
   now = Date.now()
-): Promise<Watched[] | null> {
+): Promise<Rechecked> {
   if (remembered.length === 0) {
-    return [];
+    return { rows: [], status: "answered" };
   }
 
   const ask = apiClient(around).api.secrets.statuses.$post;
@@ -144,26 +159,34 @@ export async function statusesOf(
   try {
     response = await ask({ json: { ids: remembered.map((held) => held.id) } });
   } catch {
-    return null;
+    return { status: "unreachable" };
+  }
+
+  if (response.status === TOO_MANY) {
+    const { retryAfter } = await readRefusal(response);
+    return { retryAfter, status: "metered" };
   }
 
   if (response.status !== OK) {
-    return null;
+    return { status: "unreachable" };
   }
 
   const said: unknown = await response.json().catch(() => null);
   if (typeof said !== "object" || said === null || !("secrets" in said)) {
-    return null;
+    return { status: "unreachable" };
   }
 
   const { secrets } = said;
   if (!Array.isArray(secrets)) {
-    return null;
+    return { status: "unreachable" };
   }
 
-  return secrets.flatMap(
-    (answer: unknown) => watchedFrom(answer, host, now) ?? []
-  );
+  return {
+    rows: secrets.flatMap(
+      (answer: unknown) => watchedFrom(answer, host, now) ?? []
+    ),
+    status: "answered",
+  };
 }
 
 /**

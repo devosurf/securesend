@@ -41,6 +41,11 @@ export interface Watching {
   freshness: Freshness;
   keep: () => void;
   memory: Memory;
+  /**
+   * Whole seconds the instance asked to be left alone for, when the last re-check met
+   * its limit rather than landing. Null every other time.
+   */
+  metered: number | null;
   /** The same, with the freshness line saying so while it happens. */
   recheck: () => Promise<void>;
   /** Re-reads this browser's memory and asks about all of it. False if nothing answered. */
@@ -91,6 +96,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
 
   const [rows, setRows] = useState<Watched[]>([]);
   const [freshness, setFreshness] = useState<Freshness>("load");
+  const [metered, setMetered] = useState<number | null>(null);
   const [asking, setAsking] = useState<Watched | null>(null);
   const [open, setOpen] = useState(false);
   const [trouble, setTrouble] = useState(false);
@@ -107,15 +113,21 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     const kept = browserMemory();
     if (!kept) {
       setRows([]);
+      setMetered(null);
       return true;
     }
 
     const asked = await statusesOf(recall(kept));
-    if (asked === null) {
+
+    /* Only a metered answer sets the sentence, and every other answer clears it: a
+     * re-check that landed must not leave the last one's excuse on the panel. */
+    setMetered(asked.status === "metered" ? asked.retryAfter : null);
+
+    if (asked.status !== "answered") {
       return false;
     }
 
-    setRows(asked);
+    setRows(asked.rows);
     return true;
   }, []);
 
@@ -185,6 +197,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       setOpen(false);
     },
     memory: memoryOf(rows),
+    metered,
     recheck,
     refresh,
     rows,
