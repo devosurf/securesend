@@ -59,16 +59,23 @@ pnpm typecheck      # TypeScript at maximal strictness
 pnpm test           # unit tests, plus the API tests against the dev database
 pnpm build          # what the container builds
 pnpm audit:claims   # the claims audit, which reads what the build wrote
+pnpm smoke          # the browser gate, over the container it builds
 ```
 
-CI runs all five in that order, and builds the Docker image alongside them. All of
-it has to pass. `pnpm lint:fix` fixes most style complaints for you.
+CI runs the first five in that order, and the sixth in a job of its own. All of it
+has to pass. `pnpm lint:fix` fixes most style complaints for you.
 
 The tests need the development database from `compose.dev.yaml` to be up. Some of
 the crypto tests run in a real Chromium as well as in Node, so the first run
 downloads a browser. The audit needs `DATABASE_URL` to be set, because it drives the
 real API and the API validates its environment on import, but it never queries: it
 passes with the database stopped.
+
+`pnpm smoke` needs Docker and nothing else. It builds the image from your working
+tree, brings it up with its own throwaway Postgres on port 3100, drives it, and
+stops it again. It refuses to run against an instance that is already answering
+there, because that instance was built from source that may not be yours: if a
+killed run left one up, `docker compose -f compose.smoke.yaml down`.
 
 ## Where tests go
 
@@ -83,8 +90,11 @@ Four seams, and there is no component-test layer on purpose.
    `watch`, each driven at its own boundary. This is the only place the rule in
    Non-negotiable 1 can be asserted at all, because the API cannot check that a key
    stayed out of a request it never received.
-4. **One thin Playwright smoke** over the built container, for what genuinely
-   needs a browser: fragment handling, clipboard, downloads.
+4. **One thin Playwright smoke** over the built container, in `e2e/`, for what
+   genuinely needs a browser: the fragment through a real address bar, the
+   clipboard, a download, the durations the design fixes the moves at, and the
+   Lighthouse score. Three journeys, and each one is a whole handover rather than a
+   step.
 
 Two things sit beside the four rather than inside them, and AGENTS.md explains why
 each is a licence rather than an invitation. `apps/api/src/limits` drives its token

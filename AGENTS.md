@@ -59,8 +59,8 @@ pnpm workspace, three packages:
   view backed by a SharedArrayBuffer and TypeScript now models that. A plain
   `Uint8Array` does not typecheck at a `crypto.subtle` call.
 
-`pnpm dev`, `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build`. Migrations
-are drizzle-kit generated, never hand-written:
+`pnpm dev`, `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm smoke`.
+Migrations are drizzle-kit generated, never hand-written:
 `pnpm --filter @securesend/api db:generate --name=what_it_does`. They apply on
 boot, so there is nothing to run by hand.
 
@@ -104,8 +104,13 @@ Four seams, and no component-test layer:
    exception to real integrations over mocks, it is granted for the rule in
    Non-negotiable 1 and nothing else, and it is not a licence to test a
    component.
-4. **One thin Playwright smoke** over the built container, covering only what
-   genuinely needs a browser: fragment handling, clipboard, downloads.
+4. **One thin Playwright smoke** over the built container, `pnpm smoke`. It builds
+   the image, waits for its healthcheck, drives it and brings it down again, so it
+   is the only thing here that runs against the artifact rather than the source.
+   `e2e/` covers only what genuinely needs a browser: the fragment through a real
+   address bar, the clipboard, a download, the durations the design fixes the moves
+   at, and the Lighthouse score. Three journeys, and each one is a whole handover
+   rather than a step.
 
 A good test exercises external behavior at a public boundary and would survive
 a rewrite of everything behind it.
@@ -124,13 +129,14 @@ halves. `apps/web/src/third-party.node.test.ts` reads the source: the stylesheet
 name no off-origin url, every font file they name ships, and no component sets an
 inline style. `scripts/claims` reads what the build wrote and the repo around it:
 nothing off-origin in the documents or the bundled css, no claim we are not
-allowed to make and neither strong label out of sight of its caveat, the fragment
-touched only where it is meant to be, the header bundle on every class of
-response, `.env.example` naming every variable the process reads, and every
-repository destination the footer points at being a file that exists. That half
-runs as `pnpm audit:claims`, after `pnpm build`. Its checks are pure functions
-with their own seeded-violation tests, because an audit nobody has watched fail is
-an audit nobody should trust.
+allowed to make and neither strong label out of sight of its caveat, including in
+the one line of copy a reader never sees and a search result quotes whole, the
+fragment touched only where it is meant to be, the header bundle on every class of
+response and compression on the responses big enough for it, `.env.example` naming
+every variable the process reads, and every repository destination the footer
+points at being a file that exists. That half runs as `pnpm audit:claims`, after
+`pnpm build`. Its checks are pure functions with their own seeded-violation tests,
+because an audit nobody has watched fail is an audit nobody should trust.
 
 A claim can need two seams, and "the instance never sees a filename" is the one
 that does: the compose seam proves the name never reaches the request, and the

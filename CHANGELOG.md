@@ -29,6 +29,11 @@ What is in the tree today, in the order it arrived:
   every route has a pace with an honest refusal when you meet it.
 - The self-host story: this changelog, the trust docs, the licence, and a claims
   audit in CI that checks the product's public claims are still true.
+- The whole thing driven in a real browser, against the container people run: three
+  handovers, the moves held to the durations the design fixes them at, and a score
+  of 95 or better on the homepage and on a sealed secret, with one accessibility
+  check set aside and named. Pages leave the instance compressed, which takes about
+  two seconds off how long one takes to arrive on a phone.
 
 The full prose for each of those is in [`.changeset/`](./.changeset) until the
 release folds them in.
