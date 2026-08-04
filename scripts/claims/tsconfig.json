@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    /* The audit reads the interface's own links module and drives the api, so it
+     * sees both sides of the workspace and needs the DOM types the web app has. */
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"]
+}

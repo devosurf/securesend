@@ -42,6 +42,9 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # The claims audit reads what the build wrote, so it goes after it. What it
+      # checks and why is in scripts/claims.
+      - run: pnpm audit:claims
 
   docker:
     runs-on: ubuntu-latest
