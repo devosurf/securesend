@@ -93,8 +93,8 @@ Four seams, and no component-test layer:
    named `*.node.test.ts` is one that reads the repo itself, so it runs in Node
    only; everything else has to pass in the browser too.
 3. **The browser's side of the wire.** Three folders, and between them the only
-   place the zero-knowledge rule can be asserted at all: the api cannot check
-   that a key stayed out of a request, because a fragment never reaches it.
+   place the rule in Non-negotiable 1 can be asserted at all: the api cannot
+   check that a key stayed out of a request, because a fragment never reaches it.
    `apps/web/src/compose` turns plaintext into a request, a link and a line in
    this device's memory. `apps/web/src/reveal` turns a link back into plaintext,
    and takes the key out of the address bar on the way past. `apps/web/src/watch`
@@ -118,11 +118,19 @@ day" cannot be asserted at a boundary without waiting a day. That is the whole
 licence, it is granted for the claim on the security page, and it is not an
 invitation to unit-test anything a request could reach instead.
 
-Beside the four seams there is the **claims audit**, which is not a behaviour
-test but a check that the product's public claims stay true: the banned words are
-absent, the required headers are present, and nothing the pages load comes from
-another origin. Some of it lives in `apps/web/src/third-party.node.test.ts` and
-in the api's header tests; the rest belongs in CI.
+Beside the four seams there is the **claims audit**, which is not a behaviour test
+but a check that what the product says about itself is still true. It has two
+halves. `apps/web/src/third-party.node.test.ts` reads the source: the stylesheets
+name no off-origin url, every font file they name ships, and no component sets an
+inline style. `scripts/claims` reads what the build wrote and the repo around it:
+nothing off-origin in the documents or the bundled css, no claim we are not
+allowed to make and neither strong label out of sight of its caveat, the fragment
+touched only where it is meant to be, the header bundle on every class of
+response, `.env.example` naming every variable the process reads, and every
+repository destination the footer points at being a file that exists. That half
+runs as `pnpm audit:claims`, after `pnpm build`. Its checks are pure functions
+with their own seeded-violation tests, because an audit nobody has watched fail is
+an audit nobody should trust.
 
 A claim can need two seams, and "the instance never sees a filename" is the one
 that does: the compose seam proves the name never reaches the request, and the
