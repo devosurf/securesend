@@ -100,16 +100,24 @@ function refusalOf(
     return "Nothing answered, so nothing was sent. Check your connection and press Create link again.";
   }
 
-  /* The two paces. There is no bot check and no account anywhere in this product, so
+  /* The three paces. There is no bot check and no account anywhere in this product, so
    * per-caller limits are how abuse costs are bounded, and an office behind one address
-   * will meet one honestly. Both say the wait rather than "in a moment", because the
-   * instance knows the number and a vague one sends somebody back to be refused. */
+   * will meet one honestly. Each says the wait rather than "in a moment", because
+   * whatever refused knows the number and a vague one sends somebody back to be refused.
+   *
+   * The third is for a refusal that named no cause, which is what a proxy in front of the
+   * instance gives. It names none either: claiming the instance was full when it was a
+   * network in between would be asserting something this tab cannot know. */
   if (problem === "too-fast") {
     return `That is more links than this instance takes from one place that quickly, so nothing was sent. Nothing has been shared. Try again in ${inAbout(retryAfter)}.`;
   }
 
   if (problem === "instance-busy") {
     return `This instance is at its limit for now, so nothing was sent. That is not about you, and nothing has been shared. Try again in ${inAbout(retryAfter)}.`;
+  }
+
+  if (problem === "limited") {
+    return `Something is limiting how often links can be made from here, so nothing was sent. Nothing has been shared. Try again in ${inAbout(retryAfter)}.`;
   }
 
   return "This instance would not take it, so nothing was sent and nothing was shared.";

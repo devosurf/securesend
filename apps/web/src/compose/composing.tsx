@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { WAIT_IF_UNSAID } from "../api/refusal";
 import { useAtDesk } from "../lib/lane";
 import { SETTLE_MS } from "../ui/collapse";
 import {
@@ -84,9 +85,6 @@ export type Handoff = "idle" | "shared" | "copied";
  * Nothing caps it: a slow browser takes as long as it takes.
  */
 const LOCK_FLOOR_MS = 410;
-
-/** What to say to wait when a refusal carried no number of its own. */
-const A_MINUTE_S = 60;
 
 /**
  * How the receipt says an expiry, so it says it the way the setting did. Typed
@@ -240,7 +238,7 @@ function limitOf(error: unknown): number {
 function waitOf(error: unknown): number {
   return error instanceof SendFailedError && error.retryAfter !== undefined
     ? error.retryAfter
-    : A_MINUTE_S;
+    : WAIT_IF_UNSAID;
 }
 
 export function ComposeProvider({ children }: { children: ReactNode }) {
@@ -263,7 +261,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
   const [handoff, setHandoff] = useState<Handoff>("idle");
   const [problem, setProblem] = useState<SendProblem | null>(null);
   const [limit, setLimit] = useState(MAX_ENVELOPE_BYTES);
-  const [retryAfter, setRetryAfter] = useState(A_MINUTE_S);
+  const [retryAfter, setRetryAfter] = useState(WAIT_IF_UNSAID);
 
   const usernameField = useRef<HTMLInputElement>(null);
   const sealField = useRef<HTMLInputElement>(null);

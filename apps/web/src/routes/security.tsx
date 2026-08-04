@@ -357,9 +357,9 @@ function Security() {
             <Body>
               We cannot scan what we cannot read, and we would rather keep it
               that way. So abuse control is structural: one-time links,
-              lifetimes of at most 72 hours, per-IP rate limits on create and
-              reveal, and a global creation limit. It makes a poor hosting
-              medium.
+              lifetimes of at most 72 hours, per-IP rate limits on making,
+              opening and looking up a secret, and a global creation limit. It
+              makes a poor hosting medium.
             </Body>
 
             <Body>

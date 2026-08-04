@@ -110,6 +110,14 @@ Four seams, and no component-test layer:
 A good test exercises external behavior at a public boundary and would survive
 a rewrite of everything behind it.
 
+One thing sits beside the four rather than inside them: `apps/api/src/limits`
+drives its token bucket directly, on a clock the test passes in. The api seam
+covers what a caller is told when a limit refuses them, but two of the bucket's
+properties are about elapsed time, and "no entry keyed to an address outlives a
+day" cannot be asserted at a boundary without waiting a day. That is the whole
+licence, it is granted for the claim on the security page, and it is not an
+invitation to unit-test anything a request could reach instead.
+
 Beside the four seams there is the **claims audit**, which is not a behaviour
 test but a check that the product's public claims stay true: the banned words are
 absent, the required headers are present, and nothing the pages load comes from

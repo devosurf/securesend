@@ -16,8 +16,14 @@
 
 export const TOO_MANY = 429;
 
-/** Whose limit was met. Named for the mechanism, since it is one the pages describe. */
-export type Scope = "ip" | "instance";
+/**
+ * Whose limit was met. Named for the mechanism, since it is one the pages describe.
+ *
+ * `unsaid` is the third because a 429 can come from a proxy in front of the instance,
+ * which knows nothing about this product's shapes. Guessing either of the other two
+ * there would be asserting a cause rather than omitting one.
+ */
+export type Scope = "ip" | "instance" | "unsaid";
 
 export interface Refusal {
   /** Whole seconds. Always at least one, so no copy ever says to retry immediately. */
@@ -26,30 +32,22 @@ export interface Refusal {
 }
 
 /**
- * What to say when the instance said nothing readable.
+ * How long to wait when nothing said, which is a minute.
  *
- * A 429 can also come from a proxy in front of the instance, which knows nothing about
- * this product's shapes, so the body being unreadable is a real case rather than a
- * broken one. A minute is the create limit's own refill at the default, which makes it
- * the honest guess when there is nothing to read.
+ * The create limit's own refill at the default, which makes it the honest guess. It is
+ * exported because both sides of the product need a number to hold before any refusal
+ * has arrived, and two spellings of this one would be two different waits.
  */
-const A_MINUTE = 60;
-
-/**
- * Unreadable bodies read as the instance's own limit rather than the caller's.
- *
- * Not a coin flip: telling somebody they were going too fast when the instance was
- * simply full blames them for something that was not theirs, and the reverse only omits
- * a detail. When in doubt, the product takes the blame.
- */
-const WHEN_UNSAID: Scope = "instance";
+export const WAIT_IF_UNSAID = 60;
 
 function scopeOf(said: unknown): Scope {
-  if (typeof said === "object" && said !== null && "scope" in said) {
-    return said.scope === "ip" ? "ip" : WHEN_UNSAID;
+  if (typeof said !== "object" || said === null || !("scope" in said)) {
+    return "unsaid";
   }
 
-  return WHEN_UNSAID;
+  return said.scope === "ip" || said.scope === "instance"
+    ? said.scope
+    : "unsaid";
 }
 
 function secondsOf(said: unknown, header: string | null): number {
@@ -63,7 +61,7 @@ function secondsOf(said: unknown, header: string | null): number {
   // The standard header, which is what a proxy's refusal carries when nothing else does.
   const stated = Number(header);
 
-  return Number.isInteger(stated) && stated > 0 ? stated : A_MINUTE;
+  return Number.isInteger(stated) && stated > 0 ? stated : WAIT_IF_UNSAID;
 }
 
 /** Reads the whole refusal, body and header, and always answers with something sayable. */

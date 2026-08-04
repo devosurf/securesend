@@ -1,7 +1,7 @@
 import { type FileToSeal, sealEnvelope } from "@securesend/crypto/envelope";
 import type { InferRequestType } from "hono/client";
 import { apiClient, type ClientOptions } from "../api/client";
-import { readRefusal, TOO_MANY } from "../api/refusal";
+import { readRefusal, type Scope, TOO_MANY } from "../api/refusal";
 import { browserMemory, type Kept, remember } from "./remember";
 
 /*
@@ -72,9 +72,10 @@ const utf8 = new TextEncoder();
  * text, take a file off, take several off. One sentence covering all three would
  * tell a sender who attached a disk image to shorten their note.
  *
- * Two are about pace, and they are separate for the same reason: one asks the sender
- * to slow down and the other tells them it is not about them. Both have waiting as
- * the way out, and the instance says how long.
+ * Three are about pace, and they are separate for the same reason: one asks the sender
+ * to slow down, one tells them it is not about them, and one is a refusal that named no
+ * cause, which a proxy in front of the instance gives. All three have waiting as the way
+ * out, and whatever refused says how long.
  *
  * The last one is the composer's rather than this module's: a file can fail to be
  * read before there is anything to send. It lives here because the screen has one
@@ -87,6 +88,7 @@ export type SendProblem =
   | "too-many-files"
   | "too-fast"
   | "instance-busy"
+  | "limited"
   | "refused"
   | "unreachable"
   | "unreadable-file";
@@ -116,6 +118,14 @@ export class SendFailedError extends Error {
     this.retryAfter = failure.retryAfter;
   }
 }
+
+/* Keyed by the scope on the wire, so a scope added there and not worded here will not
+ * compile rather than quietly falling into somebody else's sentence. */
+const PACE_PROBLEM: Record<Scope, SendProblem> = {
+  instance: "instance-busy",
+  ip: "too-fast",
+  unsaid: "limited",
+};
 
 export interface Draft {
   credentials?: { password: string; username: string } | undefined;
@@ -273,14 +283,12 @@ export async function sealAndSend(
     }
 
     /* Nothing was stored, so nothing was shared and the secret is still in this tab.
-     * Which of the two sentences the sender reads depends on whose limit it was, and
-     * that is the instance's to say rather than this browser's to guess. */
+     * Which sentence the sender reads depends on whose limit it was, and that is for
+     * whatever refused to say rather than for this browser to guess: a refusal that
+     * named no cause gets the sentence that names none either. */
     if (response.status === TOO_MANY) {
-      const refusal = await readRefusal(response);
-      throw new SendFailedError(
-        refusal.scope === "ip" ? "too-fast" : "instance-busy",
-        { retryAfter: refusal.retryAfter }
-      );
+      const { retryAfter, scope } = await readRefusal(response);
+      throw new SendFailedError(PACE_PROBLEM[scope], { retryAfter });
     }
 
     if (response.status !== CREATED) {

@@ -1,6 +1,7 @@
 import type { OpenedEnvelope } from "@securesend/crypto/envelope";
 import type { FragmentTokenResult } from "@securesend/crypto/fragment";
 import { useEffect, useRef, useState } from "react";
+import { WAIT_IF_UNSAID } from "../api/refusal";
 import { saveFile } from "./downloads";
 import {
   type Answered,
@@ -26,9 +27,6 @@ import { allOf } from "./parts";
  * cannot spend a second time, a wrong password does not lose the ciphertext, and
  * nothing thrown can take the page down while it is the only place the secret lives.
  */
-
-/** What to say to wait for, when a refusal carried no number of its own. */
-const A_MINUTE_S = 60;
 
 export type Screen =
   /** Asking the instance what this link is. One request, and it consumes nothing. */
@@ -127,7 +125,7 @@ export function useRevealing(id: string): Revealing {
   const [taken, setTaken] = useState(false);
   const [nothingHappened, setNothingHappened] =
     useState<NothingHappened | null>(null);
-  const [retryAfter, setRetryAfter] = useState(A_MINUTE_S);
+  const [retryAfter, setRetryAfter] = useState(WAIT_IF_UNSAID);
 
   /* The ciphertext, once the press has taken it, and from then on the only copy of
    * this secret anywhere. Nothing draws it; what it is here for is the retry, which

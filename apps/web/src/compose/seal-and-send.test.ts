@@ -321,10 +321,11 @@ describe("sealAndSend", () => {
     expect(failure.retryAfter).toBe(7);
   });
 
-  /* A 429 can come from a proxy in front of the instance, which knows nothing about
-   * this product's shapes. The wait still comes off the standard header, and an
-   * unreadable body takes the blame rather than handing it to the sender. */
-  it("takes the wait from the header when the body says nothing", async () => {
+  /* A 429 can come from a proxy in front of the instance, which knows nothing about this
+   * product's shapes. The wait still comes off the standard header, and the sentence
+   * names no cause: saying the instance was full when it was a network in between would
+   * be asserting something this tab has no way to know. */
+  it("names no cause when the refusal named none, and reads the header", async () => {
     const { world } = around(
       () =>
         new Response("<html>too many requests</html>", {
@@ -338,7 +339,7 @@ describe("sealAndSend", () => {
       world
     ).catch((error: unknown) => error)) as SendFailedError;
 
-    expect(failure.problem).toBe("instance-busy");
+    expect(failure.problem).toBe("limited");
     expect(failure.retryAfter).toBe(90);
   });
 
