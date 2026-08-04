@@ -30,22 +30,31 @@ import { burnOne, statusesOf, type Watched } from "./statuses";
 
 export type Freshness = "load" | "checking" | "fresh";
 
-/** Which of the three shapes the homepage's memory element takes. */
-export type Memory = "full" | "forgotten" | "none";
+/** Which of the four shapes the homepage's memory element takes. */
+export type Memory = "full" | "forgotten" | "unchecked" | "none";
+
+/**
+ * Why the last re-check came back with no rows, when that is what happened.
+ *
+ * It is kept because "this browser has sent nothing" and "nobody would tell us what
+ * became of what it sent" are the same empty list and must not be the same screen. A
+ * sender whose history disappeared because their office hit a rate limit would read that
+ * as the product having forgotten what they sent.
+ */
+export type CheckTrouble =
+  | { retryAfter: number; what: "metered" }
+  | { what: "unreachable" };
 
 export interface Watching {
   /** The row being asked about, restated inside the dialog. */
   asking: Watched | null;
   askToBurn: (target: Watched) => void;
+  /** Why the last re-check brought back no rows, when that is what happened. */
+  checkTrouble: CheckTrouble | null;
   confirmBurn: () => Promise<void>;
   freshness: Freshness;
   keep: () => void;
   memory: Memory;
-  /**
-   * Whole seconds the instance asked to be left alone for, when the last re-check met
-   * its limit rather than landing. Null every other time.
-   */
-  metered: number | null;
   /** The same, with the freshness line saying so while it happens. */
   recheck: () => Promise<void>;
   /** Re-reads this browser's memory and asks about all of it. False if nothing answered. */
@@ -81,14 +90,27 @@ export function useWatching(): Watching {
  * control, nothing left to burn and nothing that can change, which is why that state
  * shows its rows plainly and offers no re-check.
  */
-function memoryOf(rows: Watched[]): Memory {
-  if (rows.length === 0) {
-    return "none";
+function memoryOf(seen: {
+  checkTrouble: CheckTrouble | null;
+  remembers: boolean;
+  rows: Watched[];
+}): Memory {
+  if (seen.rows.length > 0) {
+    return seen.rows.some(
+      (row) => row.status === "sealed" || row.status === "used"
+    )
+      ? "full"
+      : "forgotten";
   }
 
-  return rows.some((row) => row.status === "sealed" || row.status === "used")
-    ? "full"
-    : "forgotten";
+  /* No rows, and two very different reasons for that. A device that remembers ids and
+   * could not find out what became of them has something to say; one whose ids are all a
+   * week past their expiry, or which has never sent anything, has nothing. */
+  if (seen.remembers && seen.checkTrouble) {
+    return "unchecked";
+  }
+
+  return "none";
 }
 
 export function WatchProvider({ children }: { children: ReactNode }) {
@@ -96,7 +118,9 @@ export function WatchProvider({ children }: { children: ReactNode }) {
 
   const [rows, setRows] = useState<Watched[]>([]);
   const [freshness, setFreshness] = useState<Freshness>("load");
-  const [metered, setMetered] = useState<number | null>(null);
+  const [checkTrouble, setCheckTrouble] = useState<CheckTrouble | null>(null);
+  /** Whether this browser holds any sent link at all, which it knows without asking. */
+  const [remembers, setRemembers] = useState(false);
   const [asking, setAsking] = useState<Watched | null>(null);
   const [open, setOpen] = useState(false);
   const [trouble, setTrouble] = useState(false);
@@ -113,22 +137,31 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     const kept = browserMemory();
     if (!kept) {
       setRows([]);
-      setMetered(null);
+      setRemembers(false);
+      setCheckTrouble(null);
       return true;
     }
 
-    const asked = await statusesOf(recall(kept));
+    const held = recall(kept);
+    setRemembers(held.length > 0);
 
-    /* Only a metered answer sets the sentence, and every other answer clears it: a
-     * re-check that landed must not leave the last one's excuse on the panel. */
-    setMetered(asked.status === "metered" ? asked.retryAfter : null);
+    const asked = await statusesOf(held);
 
-    if (asked.status !== "answered") {
-      return false;
+    if (asked.status === "answered") {
+      /* A check that landed clears the last one's excuse. Leaving it up would be the
+       * panel explaining an absence that is no longer there. */
+      setCheckTrouble(null);
+      setRows(asked.rows);
+      return true;
     }
 
-    setRows(asked.rows);
-    return true;
+    setCheckTrouble(
+      asked.status === "metered"
+        ? { retryAfter: asked.retryAfter, what: "metered" }
+        : { what: "unreachable" }
+    );
+
+    return false;
   }, []);
 
   /* A check that did not land leaves the rows and says they are as old as they are.
@@ -191,13 +224,13 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       setTrouble(false);
       setOpen(true);
     },
+    checkTrouble,
     confirmBurn,
     freshness,
     keep() {
       setOpen(false);
     },
-    memory: memoryOf(rows),
-    metered,
+    memory: memoryOf({ checkTrouble, remembers, rows }),
     recheck,
     refresh,
     rows,

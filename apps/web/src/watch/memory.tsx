@@ -8,7 +8,7 @@ import { Icon } from "../ui/icon";
 import { Panel } from "../ui/panel";
 import { StatusRow } from "../ui/status-row";
 import { TextAction } from "../ui/text-link";
-import { type Freshness, useWatching } from "./watching";
+import { type CheckTrouble, type Freshness, useWatching } from "./watching";
 
 /*
  * The device's memory, and at rest it costs the homepage one line.
@@ -140,19 +140,65 @@ function OnlyTombstones() {
   );
 }
 
+/*
+ * Why a re-check brought nothing back, in the two shapes there are of that.
+ *
+ * The metered one names no culprit. Something refused to answer this often, and whether
+ * that was the instance itself or a proxy in front of it is not something this tab can
+ * see: naming one would be asserting a cause rather than reporting a fact.
+ */
+function troubleIs(trouble: CheckTrouble): string {
+  return trouble.what === "metered"
+    ? `Something is limiting how often this can be asked, so these weren't re-checked. Try again in ${inAbout(trouble.retryAfter)}.`
+    : "Nothing answered, so these weren't re-checked. Check your connection and try again.";
+}
+
+/*
+ * This browser has sent links and nothing would say what became of them.
+ *
+ * Its own state rather than the element quietly disappearing, because disappearing is
+ * what "you have sent nothing" looks like, and a sender whose history vanished because
+ * their office met a rate limit would read it as the product having forgotten. No rows,
+ * because a row is a claim about a secret's state and there is no state to claim. The
+ * re-check is here because asking again is the whole of what there is to do.
+ */
+function Unchecked({
+  onRecheck,
+  trouble,
+}: {
+  onRecheck: () => Promise<void>;
+  trouble: CheckTrouble;
+}) {
+  return (
+    <div className="mt-6 md:mt-8">
+      <span className={QUIET}>From this browser</span>
+      <p className={cn(QUIET, "mt-1")}>
+        This browser has sent links, and nothing came back about them, so none
+        are shown.
+      </p>
+      <div className={cn(QUIET, "mt-2.5 flex flex-wrap items-center gap-2")}>
+        {troubleIs(trouble)}
+        <TextAction className="text-small" onClick={onRecheck} tone="quiet">
+          Check again
+        </TextAction>
+      </div>
+    </div>
+  );
+}
+
 export function DeviceMemory() {
-  const { freshness, memory, metered, recheck, refresh, rows, trouble } =
+  const { checkTrouble, freshness, memory, recheck, refresh, rows, trouble } =
     useWatching();
   const atDesk = useAtDesk();
 
   const [open, setOpen] = useState(false);
   const list = useRef<HTMLDivElement>(null);
 
-  /* The sentence outlives the wait that made it, so the slot has something to say on
+  /* The sentence outlives the trouble that made it, so the slot has something to say on
    * the way shut, the same way the composer's refusal does. */
-  const meteredFor = useRef("");
-  if (metered !== null) {
-    meteredFor.current = `This instance limits how often it answers, so these weren't re-checked. Try again in ${inAbout(metered)}.`;
+  const said = useRef("");
+  if (checkTrouble) {
+    said.current = troubleIs(checkTrouble);
   }
 
   /*
@@ -173,6 +219,10 @@ export function DeviceMemory() {
 
   if (memory === "forgotten") {
     return <OnlyTombstones />;
+  }
+
+  if (memory === "unchecked" && checkTrouble) {
+    return <Unchecked onRecheck={recheck} trouble={checkTrouble} />;
   }
 
   const used = rows.filter((row) => row.status === "used").length;
@@ -212,11 +262,11 @@ export function DeviceMemory() {
         )}
       </div>
 
-      {/* A re-check that met the instance's limit. The rows above are still true, they
-       * are just as old as the line already says, so this adds the reason and never
-       * takes the list away. */}
-      <Collapse open={metered !== null}>
-        <p className={cn(QUIET, "pt-2")}>{meteredFor.current}</p>
+      {/* A re-check that brought nothing back. The rows above are still true, they are
+       * just as old as the line already says, so this adds the reason and never takes the
+       * list away. */}
+      <Collapse open={checkTrouble !== null}>
+        <p className={cn(QUIET, "pt-2")}>{said.current}</p>
       </Collapse>
 
       {/* A burn that did not happen. Said once, quietly, and never in red: nothing was

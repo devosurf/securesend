@@ -337,9 +337,12 @@ function Counted({
  * button, still says what it does, and pressing it again is the whole recovery.
  *
  * They are two sentences because the way out differs. Nothing answering is the
- * recipient's connection to check. Being metered is the instance's number to wait out,
- * and saying "nothing answered" about an instance that answered instantly would be the
- * one screen on this page whose job is to be believed telling a small lie.
+ * recipient's connection to check. Being metered is somebody's number to wait out, and
+ * saying "nothing answered" about a thing that answered instantly would be the one screen
+ * on this page whose job is to be believed telling a small lie.
+ *
+ * "Something" rather than "this instance": a 429 can come from the instance's own limit or
+ * from a proxy in front of it, and this tab cannot tell which.
  */
 function nothingHappenedIs(
   reason: NothingHappened,
@@ -347,7 +350,7 @@ function nothingHappenedIs(
 ): string {
   return reason === "no-answer"
     ? "Nothing answered, so nothing was spent. Check your connection and press Open it once again."
-    : `This instance limits how often it answers, so nothing was spent. Press Open it once again in ${inAbout(retryAfter)}.`;
+    : `Something is limiting how often this can be asked, so nothing was spent. Press Open it once again in ${inAbout(retryAfter)}.`;
 }
 
 export function Latch({ revealing }: { revealing: Revealing }) {

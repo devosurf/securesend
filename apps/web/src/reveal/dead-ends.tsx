@@ -217,12 +217,16 @@ function Unreachable() {
 }
 
 /*
- * The instance answered, and what it answered was "not this often".
+ * Something answered, and what it answered was "not this often".
  *
  * Distinct from `unreachable` on purpose, because the two are the opposite fault and
  * have opposite ways out. Nothing answered means check your connection. This means the
- * connection is fine and the instance is metering, so the only useful instruction is a
- * number, and it is the instance's number rather than one invented here.
+ * connection is fine and something is metering, so the only useful instruction is a
+ * number, and it is that thing's own number rather than one invented here.
+ *
+ * "Something" and not "this instance", deliberately. A 429 can come from the instance's
+ * own limit or from a proxy in front of it, and this tab cannot tell which: naming one
+ * would be asserting a cause instead of reporting a fact.
  *
  * There is no bot check and no account anywhere in this product, so per-caller limits
  * are the whole of how abuse costs are bounded, which makes this a screen an ordinary
@@ -233,7 +237,7 @@ function Unreachable() {
 function TooFast({ retryAfter }: { retryAfter: number }) {
   return (
     <DeadEnd
-      body="This instance limits how often it answers, and this arrived over that. Nothing has been opened and nothing has been spent: the secret is exactly as the sender left it."
+      body="Something is limiting how often this can be asked, and this arrived over that. Nothing has been opened and nothing has been spent: the secret is exactly as the sender left it."
       footnote={`Load the link again in ${inAbout(retryAfter)}.`}
       heading="This page couldn't ask yet."
     />
