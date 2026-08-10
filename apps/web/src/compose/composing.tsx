@@ -57,17 +57,24 @@ interface Seal {
 }
 
 /**
- * A file in the envelope, read the moment it was attached rather than at send.
+ * A file in the envelope: the row, and not the bytes.
  *
- * Reading early is what makes the row honest: the size beside the name is the
- * size of the bytes this browser is holding, and a file edited on disk between
- * attaching it and pressing Create link cannot quietly change what gets sealed.
+ * The read still starts the moment the file is attached rather than at send, and
+ * that is what keeps the row honest: a file edited on disk between attaching it
+ * and pressing Create link cannot quietly change what gets sealed. What changed
+ * is when the row is drawn. Reading ten megabytes off a phone's disk is not free,
+ * and a gesture that shows nothing until it finishes reads as a gesture the page
+ * missed, so the row lands on the press with what the picker already said and the
+ * bytes catch up behind it.
+ *
+ * The bytes are not in here because they are not in state at all. See `held`.
  */
 interface Attachment {
-  bytes: Uint8Array<ArrayBuffer>;
   id: number;
   name: string;
   open: boolean;
+  /** What the picker said it weighs, replaced by the bytes' own once they land. */
+  size: number;
   type: string;
 }
 
@@ -225,7 +232,7 @@ function carriesFiles(event: DragEvent<HTMLElement>): boolean {
 
 /** What the envelope's files weigh, which is nearly all of what the cap measures. */
 function weightOf(files: readonly Attachment[]): number {
-  return files.reduce((sum, one) => sum + one.bytes.length, 0);
+  return files.reduce((sum, one) => sum + one.size, 0);
 }
 
 function limitOf(error: unknown): number {
@@ -274,6 +281,16 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
   const blurring = useRef(0);
   const inFlight = useRef<Promise<void> | null>(null);
   const nextFile = useRef(1);
+  /*
+   * The bytes, held outside state, for two reasons and the first is correctness. A
+   * press can land in the gap between a row appearing and its file finishing being
+   * read, so what that press seals has to be readable before the next render rather
+   * than after it. The second is that a secret runs to ten megabytes and state is
+   * for what the screen draws. The screen never draws these.
+   */
+  const held = useRef(new Map<number, Uint8Array<ArrayBuffer>>());
+  /** Every read started and not finished, so a press can wait out all of them. */
+  const reads = useRef(new Set<Promise<void>>());
   /* Dragging over a child fires leave on the parent, so the page would disarm
    * every time the cursor crossed a row. Counting enter against leave is what
    * makes "still over the page" a thing this can know. */
@@ -317,19 +334,31 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     (pair !== null && pairIsFilled(pair));
   const canSend = hasSomething && !(seal !== null && seal.value === "");
 
-  function draftOf(): Draft {
+  /**
+   * What the envelope carries, or nothing at all because a file's bytes are not in
+   * hand.
+   *
+   * Only ever asked once every read has settled, so a row with no bytes behind it is
+   * a read that failed. Sealing the rest would be this quietly deciding which half
+   * of a handover matters, which is the same thing a drop over a cap is refused for.
+   */
+  function sealable(): Draft | null {
+    const attached = files.flatMap((one) => {
+      const bytes = held.current.get(one.id);
+
+      return bytes ? [{ bytes, name: one.name, type: one.type }] : [];
+    });
+
+    if (attached.length !== files.length) {
+      return null;
+    }
+
     return {
       ...(pair && {
         credentials: { password: pair.password, username: pair.username },
       }),
       ...(seal && { password: seal.value }),
-      ...(files.length > 0 && {
-        files: files.map((one) => ({
-          bytes: one.bytes,
-          name: one.name,
-          type: one.type,
-        })),
-      }),
+      ...(attached.length > 0 && { files: attached }),
       expiry,
       note,
     };
@@ -341,7 +370,22 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     const startedAt = performance.now();
 
     try {
-      const made = await sealAndSend(draftOf());
+      /* A press can land while a file is still being read, because the row was drawn
+       * before its bytes were in hand. It waits rather than sealing around a hole: an
+       * envelope missing the file the sender watched themselves attach is the worst
+       * thing this could do quietly. The dim is already on screen, so the wait costs
+       * the sender nothing but time. Nothing can join the set while this waits,
+       * because attaching is refused for the length of the lock. */
+      await Promise.all([...reads.current]);
+
+      const draft = sealable();
+      if (!draft) {
+        await restOfTheFloor(startedAt);
+        setProblem("unreadable-file");
+        return;
+      }
+
+      const made = await sealAndSend(draft);
       await restOfTheFloor(startedAt);
 
       setCopied(await toClipboard(made.href));
@@ -378,6 +422,48 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     return inFlight.current;
   }
 
+  /** One gesture's bytes, into hand, or the rows it drew back off the screen. */
+  async function read(arriving: readonly { file: File; id: number }[]) {
+    let bytes: { bytes: Uint8Array<ArrayBuffer>; id: number }[];
+
+    try {
+      bytes = await Promise.all(
+        arriving.map(async ({ file, id }) => ({
+          bytes: new Uint8Array(await file.arrayBuffer()),
+          id,
+        }))
+      );
+    } catch {
+      /* A file moved or was deleted between the picker and this read. The gesture is
+       * taken whole or not at all, so every row it drew leaves again. Nothing about
+       * the file is worth carrying into the sentence: the name is the sender's
+       * business and the browser will not say more than that it could not be read. */
+      const drawn = new Set(arriving.map(({ id }) => id));
+
+      setFiles((now) => now.filter((one) => !drawn.has(one.id)));
+      setProblem("unreadable-file");
+      return;
+    }
+
+    /* Before the state update, so a press that was waiting on this read finds the
+     * bytes the instant it stops waiting rather than a render later. */
+    for (const one of bytes) {
+      held.current.set(one.id, one.bytes);
+    }
+
+    /* The row showed the weight the picker claimed. This is the weight of the bytes
+     * in hand, which is the one the envelope will actually carry. */
+    const landed = new Map(bytes.map((one) => [one.id, one.bytes.length]));
+
+    setFiles((now) =>
+      now.map((one) => {
+        const weight = landed.get(one.id);
+
+        return weight === undefined ? one : { ...one, size: weight };
+      })
+    );
+  }
+
   /*
    * Attaching, which is where a file stops being a thing on a disk and becomes
    * bytes this browser is holding.
@@ -385,7 +471,8 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
    * A gesture is taken whole or not at all. Attaching four of five dropped files
    * and saying nothing about the fifth would be the product quietly deciding which
    * parts of a handover matter, so a drop that would pass a cap is refused with a
-   * sentence and the envelope is left exactly as it was.
+   * sentence and the envelope is left exactly as it was. That ruling happens before
+   * a single row is drawn, which is what lets the rows be drawn early at all.
    *
    * The weight checked here is the files' own, not the whole secret's. The note
    * can add a quarter of a megabyte to that and sealAndSend is the authority on
@@ -393,6 +480,24 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
    * sentence. This one is the early answer, not the ruling.
    */
   async function attach(chosen: ArrayLike<File>) {
+    /*
+     * Not while the envelope is being sealed. The dim says the parts are no longer
+     * the sender's to edit, and this is the one way into the envelope that the dim
+     * does not cover: the drop handlers are on the page rather than on the panel, so
+     * a file dropped mid-lock reaches here whatever the panel looks like.
+     *
+     * Refused rather than queued, because the press has already decided what it is
+     * sealing. A row that appeared after that decision and was not in the secret
+     * would be the sender watching a file attach and then not arrive.
+     *
+     * `locking` is reliable here despite being state rather than a ref: it is set
+     * inside the press, so React has flushed it before the browser hands anything
+     * else an event to run this from.
+     */
+    if (locking) {
+      return;
+    }
+
     const picked = Array.from(chosen);
     if (picked.length === 0) {
       return;
@@ -408,32 +513,34 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    let read: Attachment[];
-    try {
-      read = await Promise.all(
-        picked.map(async (one) => {
-          const id = nextFile.current;
-          nextFile.current += 1;
+    const arriving = picked.map((file) => {
+      const id = nextFile.current;
+      nextFile.current += 1;
 
-          return {
-            bytes: new Uint8Array(await one.arrayBuffer()),
-            id,
-            name: one.name,
-            open: true,
-            type: one.type,
-          };
-        })
-      );
-    } catch {
-      /* A file moved or deleted between the picker and this read. Nothing about
-       * it is worth carrying into an error: the name is the sender's business and
-       * the browser will not say more than that it could not be read. */
-      setProblem("unreadable-file");
-      return;
-    }
+      return { file, id };
+    });
 
+    /* The rows land now, from what the picker already said about each file. Reading
+     * is the slow half and it happens behind them. */
     setProblem(null);
-    setFiles((now) => [...now, ...read]);
+    setFiles((now) => [
+      ...now,
+      ...arriving.map(({ file, id }) => ({
+        id,
+        name: file.name,
+        open: true,
+        size: file.size,
+        type: file.type,
+      })),
+    ]);
+
+    const reading = read(arriving);
+    reads.current.add(reading);
+    try {
+      await reading;
+    } finally {
+      reads.current.delete(reading);
+    }
   }
 
   /*
@@ -566,6 +673,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     problem,
     removeFile(id) {
       edited();
+      held.current.delete(id);
       setFiles((now) =>
         now.map((one) => (one.id === id ? { ...one, open: false } : one))
       );
@@ -589,6 +697,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     seal,
     send,
     sendAnother() {
+      held.current.clear();
       setStage("compose");
       setStarted(false);
       setCopied(false);

@@ -118,10 +118,16 @@ export function PhoneBar() {
        * attach affordance being permanently in reach. It opens this device's own
        * picker, which is where the photos are: a screenshot of a config is a file
        * like any other. */}
+      {/* Both go unavailable while the envelope is being sealed, because the press
+       * has already decided what it is sealing: a part added after that decision
+       * would be the sender watching a row arrive and then not be in the secret. At a
+       * desk the dim over the panel says this; the bar is not behind the dim, so it
+       * has to say it itself. */}
       <div className="-mx-3 flex items-center">
         <Collapse axis="inline" enter={false} open={pair === null}>
           <Button
             className="gap-1.5 px-3"
+            disabled={locking}
             onClick={addPair}
             onMouseDown={keepCaret}
             ref={affordances.pairOnPhone}
@@ -134,6 +140,7 @@ export function PhoneBar() {
         </Collapse>
         <Button
           className="gap-1.5 px-3"
+          disabled={locking}
           onClick={pickFiles}
           onMouseDown={keepCaret}
           ref={affordances.attachOnPhone}
