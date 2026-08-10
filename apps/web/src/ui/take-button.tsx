@@ -1,6 +1,7 @@
 import { cn } from "../lib/utils";
 import { Button } from "./button";
 import { Icon, type IconName } from "./icon";
+import { SwapLabel } from "./swap-row";
 
 /*
  * The control that gets a whole secret out of the page before the page stops
@@ -20,6 +21,12 @@ import { Icon, type IconName } from "./icon";
  *
  * Busy is here because packaging a download is not instant and a button that looks
  * idle for half a second reads as a button that did not take the press.
+ *
+ * Every label it can carry is measured, not just the one it is carrying. Taken is
+ * half the width of Take everything, and this button sits at one end of a row that
+ * lays itself out around it, so a plain swap would move the sentence beside it at
+ * the exact moment the recipient is reading that sentence to find out whether the
+ * press worked. See SwapLabel.
  */
 
 export interface TakeButtonProps {
@@ -61,6 +68,10 @@ export function TakeButton({
     return done ? doneLabel : label;
   }
 
+  /* A Set because a caller is free to give the same word twice: a busy label that
+   * repeats the resting one is one reading, not two cells. */
+  const readings = [...new Set([label, doneLabel, busyLabel ?? label])];
+
   return (
     <Button
       busy={busy}
@@ -77,7 +88,7 @@ export function TakeButton({
       variant={variant}
     >
       <Icon name={done && !busy ? "check" : icon} size={ICON_SIZE[size]} />
-      {text()}
+      <SwapLabel readings={readings} said={text()} />
     </Button>
   );
 }

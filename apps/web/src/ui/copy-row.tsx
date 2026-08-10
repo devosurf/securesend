@@ -3,6 +3,7 @@ import { cn } from "../lib/utils";
 import { Button } from "./button";
 import { Icon } from "./icon";
 import { LinkSpecimen } from "./link-specimen";
+import { SwapLabel } from "./swap-row";
 
 /*
  * One part of a secret, on one line, with its own copy button.
@@ -51,6 +52,13 @@ import { LinkSpecimen } from "./link-specimen";
  */
 
 const COPIED_MS = 1600;
+
+/* Both controls report back in a longer word than they offered in, so both reserve
+ * the room for it. See SwapLabel: a row that lays itself out around Copy must not
+ * relayout the moment Copy becomes Copied, least of all under the cursor that just
+ * pressed it. */
+const COPY = ["Copy", "Copied"] as const;
+const SHOW = ["Show", "Hide"] as const;
 
 export interface CopyRowProps {
   className?: string;
@@ -147,7 +155,7 @@ function Actions({
           variant="ghost"
         >
           <Icon name={shown ? "eye-off" : "eye"} />
-          {shown ? "Hide" : "Show"}
+          <SwapLabel readings={SHOW} said={shown ? "Hide" : "Show"} />
         </Button>
       ) : null}
       <Button
@@ -157,7 +165,7 @@ function Actions({
         variant="ghost"
       >
         <Icon name={copied ? "check" : "copy"} />
-        {copied ? "Copied" : "Copy"}
+        <SwapLabel readings={COPY} said={copied ? "Copied" : "Copy"} />
       </Button>
     </div>
   );
