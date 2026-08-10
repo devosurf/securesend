@@ -3,7 +3,16 @@
 @import "./tokens.css";
 @import "./transitions.css";
 
+/* The room a scrollbar takes is always taken, whether or not there is one.
+ *
+ * The recipient's page is a different height on every one of its eleven screens, and
+ * several of them sit either side of the viewport's own. On a platform that gives a
+ * scrollbar room of its own, one appearing takes fifteen pixels off the page's width,
+ * which moves everything on it sideways: a press that was about opening a secret
+ * reads as the whole layout flinching. Reserving the room costs those pixels once, at
+ * load, where nothing is moving yet. */
 html {
+  scrollbar-gutter: stable;
   color-scheme: dark;
   background-color: var(--color-bg);
 }
