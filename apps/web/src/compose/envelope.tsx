@@ -12,9 +12,15 @@ import { FileRow } from "../ui/file-row";
 import { Icon } from "../ui/icon";
 import { OptionsRow } from "../ui/options-row";
 import { Panel } from "../ui/panel";
-import { SwapRow } from "../ui/swap-row";
+import { SwapLabel, SwapRow } from "../ui/swap-row";
 import { useComposing } from "./composing";
 import type { SendProblem } from "./seal-and-send";
+
+/* The two things the one action says, measured together. Locking… is a third
+ * narrower than Create link, and the action sits at the right-hand end of a strip
+ * that lays itself out around it, so a plain swap would shrink the button under the
+ * cursor that had just pressed it. See SwapLabel. */
+const SENDING = ["Create link", "Locking…"] as const;
 
 /*
  * The envelope the sender fills, which is the product's whole above-fold job.
@@ -380,7 +386,7 @@ export function Envelope() {
                 className="border-hairline border-t"
                 density={density}
                 layout={layout}
-                meta={spokenSize(file.bytes.length)}
+                meta={spokenSize(file.size)}
                 name={file.name}
                 onRemove={() => removeFile(file.id)}
               />
@@ -402,7 +408,10 @@ export function Envelope() {
               disabled={!canSend}
               onClick={send}
             >
-              {locking ? "Locking…" : "Create link"}
+              <SwapLabel
+                readings={SENDING}
+                said={locking ? "Locking…" : "Create link"}
+              />
             </Button>
           }
           addPasswordRef={affordances.seal}
@@ -420,25 +429,40 @@ export function Envelope() {
         />
       </Panel>
 
-      {/* Arrives and leaves with the row it explains, so the click reads as one
-       * event rather than a row opening and a paragraph appearing. */}
-      <Collapse open={sealOpen && !locking}>
-        <p className="pt-3 font-sans text-ink-muted text-small">
-          We never see this password, so we can't check it or reset it. Send it
-          <span className="hidden md:inline"> to them</span> some other way than
-          the link.
-        </p>
-      </Collapse>
+      {/* These go quiet with the panel rather than leaving while it works.
+       *
+       * They are what the sender owns, so they dim on the same fade the panel's own
+       * body does, and they dim rather than collapsing because collapsing is a
+       * height: a paragraph closing on the press would take 40 pixels out of the
+       * page in the same moment the browser started encrypting, which is the one
+       * moment in the product nothing should move. */}
+      <div
+        className={cn(
+          "transition-opacity duration-[var(--duration-quick)] motion-reduce:transition-none",
+          locking && "opacity-50"
+        )}
+      >
+        {/* Arrives and leaves with the row it explains, so the click reads as one
+         * event rather than a row opening and a paragraph appearing. */}
+        <Collapse open={sealOpen}>
+          <p className="pt-3 font-sans text-ink-muted text-small">
+            We never see this password, so we can't check it or reset it. Send
+            it
+            <span className="hidden md:inline"> to them</span> some other way
+            than the link.
+          </p>
+        </Collapse>
 
-      {/* The one dead end this surface has, and it gets words. A seal row with
-       * nothing in it holds the send, because a sender who asked for a password
-       * meant it and dropping the option quietly would be worse than waiting. It
-       * leaves on the first character typed, so it cannot flicker. */}
-      <Collapse open={sealOpen && seal?.value === "" && !locking}>
-        <p className="pt-2 font-sans text-ink-faint text-small">
-          Create link waits until you type it, or take the line off again.
-        </p>
-      </Collapse>
+        {/* The one dead end this surface has, and it gets words. A seal row with
+         * nothing in it holds the send, because a sender who asked for a password
+         * meant it and dropping the option quietly would be worse than waiting. It
+         * leaves on the first character typed, so it cannot flicker. */}
+        <Collapse open={sealOpen && seal?.value === ""}>
+          <p className="pt-2 font-sans text-ink-faint text-small">
+            Create link waits until you type it, or take the line off again.
+          </p>
+        </Collapse>
+      </div>
 
       <Refusal />
 
