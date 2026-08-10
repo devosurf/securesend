@@ -28,6 +28,15 @@ import { Shell } from "../reveal/shell";
  * died. Open to saved is a burn for the same reason, and so is a press that lands on a
  * dead end: that is the same event seen from the outside.
  *
+ * The swap takes the whole of the room rather than only what it needs, and that is what
+ * keeps the moves still. PhaseSwap mounts both readings in one cell, so while a move
+ * plays, the cell is as tall as the taller of the two and then drops to the height of the
+ * one that stayed. Sized to its content on a page that centres it, that drop re-centres
+ * everything on the screen a beat after the press: the secret would finish its 520ms
+ * uncover and then jump. Given the room instead, the stage is one height for every one of
+ * the eleven screens, each screen is centred inside it, and a screen taller than the room
+ * grows it and scrolls like any other page. Nothing moves that was not asked to.
+ *
  * ==== the wash =============================================================
  *
  * It follows the act, not the page. Asking, sealed, retry and open wear it; every dead
@@ -98,7 +107,11 @@ function Reveal() {
        */}
       {screen === "asking" ? null : (
         <PhaseSwap
-          className="w-full flex-1 md:flex-none"
+          /* Centred at the desk width, where the room is a band the screen sits in
+           * the middle of. Not on a phone: there the stage is a scrolling region and
+           * centring inside one puts the top of a long screen above the scroll
+           * origin, where nothing can reach it. */
+          className="w-full flex-1 md:items-center"
           move={screen === "open" ? "reveal" : "burn"}
           phase={screen}
         >
