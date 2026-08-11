@@ -7,12 +7,12 @@
     "build": "pnpm -r build",
     "changeset": "changeset",
     "dev": "pnpm -r --parallel dev",
+    "images": "tsx scripts/images/render.ts",
     "lint": "biome check",
     "lint:fix": "biome check --write",
-    "og": "tsx scripts/og/render.ts",
     "smoke": "playwright test",
     "test": "vitest run",
-    "typecheck": "pnpm -r typecheck && tsc --noEmit -p scripts/claims && tsc --noEmit -p scripts/og && tsc --noEmit -p e2e"
+    "typecheck": "pnpm -r typecheck && tsc --noEmit -p scripts/claims && tsc --noEmit -p scripts/images && tsc --noEmit -p e2e"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.6",

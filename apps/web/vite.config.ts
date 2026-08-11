@@ -124,6 +124,27 @@ function head(surface: Surface): string[] {
   ];
 }
 
+/**
+ * The two pages meant to be found, listed for a crawler.
+ *
+ * No `lastmod` on either entry. It is the field a generator reaches for and the
+ * one it is most likely to lie about: the honest value is when the words on the
+ * page last changed, which a build that reruns on every deploy does not know. A
+ * missing field costs nothing, and a wrong one teaches a crawler to ignore the
+ * file.
+ */
+function sitemap(): string {
+  const entries = SURFACES.filter(({ path }) => path !== null)
+    .map(({ path }) => `  <url><loc>${ORIGIN}${path}</loc></url>`)
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${entries}
+</urlset>
+`;
+}
+
 /** One document: its title, its head, and its body if it has one. */
 function document(template: string, surface: Surface, markup: string) {
   const named = inHead(titled(template, surface.title), head(surface));
@@ -186,6 +207,8 @@ function prerender(): Plugin {
             );
           })
         );
+
+        await writeFile(resolve(dist, "sitemap.xml"), sitemap());
       } finally {
         await rm(resolve(root, SSR_OUT), { force: true, recursive: true });
       }

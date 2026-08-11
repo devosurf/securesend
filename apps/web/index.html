@@ -3,7 +3,17 @@
   <head>
     <meta charset="utf-8">
     <meta content="width=device-width, initial-scale=1" name="viewport">
+    <!--
+      Three icons for three readers. The svg is what a current browser wants and
+      the only one that is actually the drawing rather than a rendering of it. The
+      ico is for the request a browser makes before it has read any of this, which
+      goes to /favicon.ico whatever the head says. The png is named and sized for
+      Google, whose guidance asks for a square larger than 48 and whose crawler
+      should not have to open a container to find one.
+    -->
+    <link href="/favicon.ico" rel="icon" sizes="16x16 32x32 48x48">
     <link href="/favicon.svg" rel="icon" type="image/svg+xml">
+    <link href="/icon-96.png" rel="icon" sizes="96x96" type="image/png">
     <title>SecureSend</title>
   </head>
   <body>

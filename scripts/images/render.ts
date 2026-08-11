@@ -1,26 +1,35 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright";
+import { type Browser, chromium } from "playwright";
 import { CARD, CARDS, type Card } from "../../apps/web/social.ts";
 
 /*
- * The two share images, drawn from the product's own tokens and font files.
+ * Every picture the instance serves, drawn from the product's own tokens, mark
+ * and font files: the two share cards, and the icons.
  *
- * `pnpm og`. The output is committed, because it is an asset the instance serves
- * rather than something the build makes: putting a browser in the build path to
- * redraw two static pictures on every deploy would be a strange price for a file
- * that changes when the design does and never otherwise.
+ * `pnpm images`. The output is committed, because these are assets the instance
+ * serves rather than something the build makes: putting a browser in the build
+ * path to redraw a handful of static pictures on every deploy would be a strange
+ * price for files that change when the design does and never otherwise.
  *
  * Drawn here rather than exported from a design tool for the reason the fonts are
  * self-hosted: the values are already written down. The colours are the tokens,
  * the faces are the woff2 files the app serves, and the mark is the path
- * src/ui/wordmark.tsx draws. So the cards cannot quietly stop matching the
- * product, and moving a token moves them on the next run.
+ * src/ui/wordmark.tsx draws. So nothing here can quietly stop matching the
+ * product, and moving a token moves all of it on the next run.
  *
- * Sizes are the card's own. Faces, weights and tracking are the page's, but a
- * chat window renders this at about a third of its width, so type set at the
- * interface's own sizes would arrive at eight or nine pixels. What is quoted here
+ * Card sizes are the card's own. Faces, weights and tracking are the page's, but a
+ * chat window renders a card at about a third of its width, so type set at the
+ * interface's own sizes would arrive at eight or nine pixels. What is quoted there
  * is the voice, not the measurements.
+ *
+ * ==== why an icon needs drawing at all =====================================
+ *
+ * favicon.svg already exists and every current browser prefers it. This is for
+ * the two readers that do not. A browser with no `link` to go on asks the root
+ * for `/favicon.ico` before it has parsed anything, and Google's icon crawler
+ * wants a raster it can put in a search result, where the guidance is a square
+ * larger than 48. So the same path is rendered to PNGs and packed into an ico.
  */
 
 const FONTS = fileURLToPath(
@@ -126,6 +135,83 @@ p{margin-top:28px;max-width:940px;color:${INK_MUTED};text-wrap:balance;
 </html>`;
 }
 
+/**
+ * The mark alone, on nothing, at one size.
+ *
+ * Transparent rather than on the product's own black, because these are shown on
+ * somebody else's ground: a browser tab that follows the system theme, and a
+ * search result that is white today and dark tomorrow. A black tile would be a
+ * black rectangle in half of those.
+ */
+function iconMarkup(size: number) {
+  return `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><style>
+*{margin:0;padding:0}
+html,body{background:transparent}
+svg{display:block}
+</style></head>
+<body><svg width="${size}" height="${size}" viewBox="0 0 32 32"><path d="${MARK}" fill="${ACCENT}"/></svg></body>
+</html>`;
+}
+
+/**
+ * The sizes packed into favicon.ico, and the one Google is pointed at.
+ *
+ * 16 and 32 are what a tab and a bookmark ask for. 48 is in there because it is
+ * the size Google's guidance is written around. The 96 is a separate file rather
+ * than a fourth entry in the ico, so the `link` in the head can name a size and
+ * a type: an ico is a container, and a crawler reading one has to open it to
+ * find out what is inside.
+ */
+const PACKED = [16, 32, 48] as const;
+const RASTER = 96;
+
+/**
+ * An ico wrapping PNGs, which is the modern form of the format.
+ *
+ * A directory of fixed 16-byte entries, then the images themselves. Every entry
+ * has to carry the offset its image lands at, so the header and the directory are
+ * measured before the first byte of image data is placed.
+ */
+function ico(images: readonly { png: Buffer; size: number }[]): Buffer {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(images.length, 4);
+
+  const directory = Buffer.alloc(16 * images.length);
+  let at = header.length + directory.length;
+
+  for (const [index, { png, size }] of images.entries()) {
+    const entry = index * 16;
+
+    directory.writeUInt8(size, entry);
+    directory.writeUInt8(size, entry + 1);
+    // Colour planes and bits per pixel. The palette and reserved bytes either
+    // side stay zero, which is what "no palette" means here.
+    directory.writeUInt16LE(1, entry + 4);
+    directory.writeUInt16LE(32, entry + 6);
+    directory.writeUInt32LE(png.length, entry + 8);
+    directory.writeUInt32LE(at, entry + 12);
+
+    at += png.length;
+  }
+
+  return Buffer.concat([header, directory, ...images.map(({ png }) => png)]);
+}
+
+/** One icon, rendered on nothing at the size asked for. */
+async function icon(from: Browser, size: number): Promise<Buffer> {
+  const page = await from.newPage({
+    deviceScaleFactor: 1,
+    viewport: { height: size, width: size },
+  });
+
+  await page.setContent(iconMarkup(size), { waitUntil: "load" });
+
+  return await page.screenshot({ omitBackground: true, type: "png" });
+}
+
 const inlinedFaces = (
   await Promise.all([face(FACES.display), face(FACES.sans)])
 ).join("\n");
@@ -155,6 +241,16 @@ try {
       console.log(`wrote ${card.file}`);
     })
   );
+
+  const packed = await Promise.all(
+    PACKED.map(async (size) => ({ png: await icon(browser, size), size }))
+  );
+
+  await writeFile(`${OUT}favicon.ico`, ico(packed));
+  console.log(`wrote favicon.ico (${PACKED.join(", ")})`);
+
+  await writeFile(`${OUT}icon-${RASTER}.png`, await icon(browser, RASTER));
+  console.log(`wrote icon-${RASTER}.png`);
 } finally {
   await browser.close();
 }

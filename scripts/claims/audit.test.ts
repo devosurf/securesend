@@ -84,6 +84,14 @@ const SECRET_CARD_IMAGE =
   /<meta content="https?:\/\/[^"]+\/og-secret\.png" property="og:image">/;
 const CANONICAL = /<link href="https?:\/\/[^"]+" rel="canonical">/;
 
+/** What a sitemap entry points at, with this instance's own address taken off. */
+const SITEMAP_LOC = /<loc>https?:\/\/[^/]+([^<]*)<\/loc>/g;
+/** The line that hands a crawler the sitemap, absolute as that line has to be. */
+const SITEMAP_LINE = /^Sitemap: https?:\/\/\S+\/sitemap\.xml$/m;
+const AN_IMAGE = /^image\//;
+
+const NOT_FOUND = 404;
+
 function report(findings: readonly Finding[]): string[] {
   return findings.map(({ where, what }) => `${where}: ${what}`);
 }
@@ -488,11 +496,76 @@ describe("a built instance", () => {
     expect(document).not.toContain("og:url");
   });
 
-  it.each(["/og.png", "/og-secret.png"])("serves %s", async (path) => {
-    const response = await request(path);
+  it.each(["/og.png", "/og-secret.png", "/icon-96.png"])(
+    "serves %s",
+    async (path) => {
+      const response = await request(path);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("image/png");
+    }
+  );
+
+  it("serves an icon at the address a browser asks for before it reads anything", async () => {
+    /* Every browser requests /favicon.ico off the root whatever the head says, and
+     * so does the crawler that puts an icon beside a search result. This used to
+     * answer 200 with the shell's markup, which is how the site spent its first
+     * week in Google wearing a generic globe. */
+    const response = await request("/favicon.ico");
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toBe("image/png");
+    expect(response.headers.get("content-type")).toMatch(AN_IMAGE);
+  });
+
+  /*
+   * A file this instance does not have is a 404, not a page.
+   *
+   * The rule is worth a test because the failure is silent and expensive: a 200 is
+   * a promise, and everything downstream believes it. A CDN caches markup under an
+   * image's address, a crawler files a page as an icon, and nothing anywhere logs
+   * a problem. Three separate symptoms traced back to this one answer.
+   */
+  it.each(["/nothing-here.png", "/sitemap.xsl", "/apple-touch-icon.png"])(
+    "404s %s rather than answering with a page",
+    async (path) => {
+      const response = await request(path);
+
+      expect(response.status).toBe(NOT_FOUND);
+      expect(response.headers.get("content-type")).not.toContain("text/html");
+    }
+  );
+
+  it("still gives an unknown route the shell, because that is a route", async () => {
+    // The rule keys on a file extension, and it has to: a secret's address has no
+    // dot in it, and neither does anything else the client routes.
+    const response = await request("/s/7hK2mQ");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+  });
+
+  it("names this instance in robots.txt and still keeps secrets out", async () => {
+    const response = await request("/robots.txt");
+    const robots = await response.text();
+
+    expect(response.headers.get("content-type")).toContain("text/plain");
+    expect(robots).toMatch(SITEMAP_LINE);
+    expect(robots).toContain("Disallow: /s/");
+  });
+
+  it("lists both pages in the sitemap and no secret", async () => {
+    const response = await request("/sitemap.xml");
+    const map = await response.text();
+
+    expect(response.headers.get("content-type")).toContain("application/xml");
+    expect([...map.matchAll(SITEMAP_LOC)].map(([, at]) => at)).toEqual([
+      "/",
+      "/security",
+    ]);
+    /* A sitemap is an invitation to crawl every address in it, so a secret's
+     * address appearing here would undo the header, the document and robots.txt
+     * in one line. Nothing can put one there today; this is here so nothing can. */
+    expect(map).not.toContain("/s/");
   });
 });
 

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { sql } from "drizzle-orm";
-import { type Context, type Handler, Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { compress } from "hono/compress";
 import { createMiddleware } from "hono/factory";
 import { db } from "./db/client";
@@ -117,33 +117,69 @@ function escapeAttribute(value: string) {
     .replaceAll('"', "&quot;");
 }
 
+const HTML = "text/html; charset=UTF-8";
+
 /**
- * One built document, read once at startup and named per request.
+ * One built file, read once at startup and named per request.
  *
- * Read once because these are three small files that cannot change while the
- * process runs, and escaped on the way in because the host is whatever the
- * request said it was.
+ * Read once because these are small files that cannot change while the process
+ * runs, and escaped on the way in because the host is whatever the request said
+ * it was. The escaping is exactly right for the two markup types and inert for
+ * the text one, where the only thing substituted is a hostname.
  */
-function document(file: string): Handler {
+function served(file: string, type: string): (c: Context) => Response {
   const template = readFileSync(`${WEB_BUILD}/${file}`, "utf8");
 
   return (c) =>
-    c.html(template.replaceAll(ORIGIN, escapeAttribute(originOf(c))));
+    c.body(template.replaceAll(ORIGIN, escapeAttribute(originOf(c))), 200, {
+      "Content-Type": type,
+    });
 }
+
+/**
+ * A path whose last segment names a file.
+ *
+ * No route this application has contains a dot: there are three, and the only
+ * variable part of any of them is a secret id, which is base64url. So a dot in
+ * the last segment means a file was asked for, and if the static handler above
+ * did not answer, that file is not here.
+ *
+ * Worth the rule rather than serving everything the shell, because a 200 is a
+ * promise. A browser asking for /favicon.ico before it has parsed anything, a
+ * crawler checking /sitemap.xml, a CDN caching by extension: each of them takes
+ * a 200 at its word, and what they got was a page of markup filed under an
+ * image. One of those quietly cost this site its icon in search results.
+ */
+const NAMES_A_FILE = /\.[^./]+$/;
 
 // One container serves the built SPA from this same process. In development the
 // build is absent and Vite serves the app instead.
 if (existsSync(WEB_BUILD)) {
   // The two static pages are prerendered, so each one is a document the build
   // already wrote rather than a script tag that becomes one.
-  app.get("/", document("index.html"));
-  app.get("/security", document("security.html"));
+  app.get("/", served("index.html", HTML));
+  app.get("/security", served("security.html", HTML));
+
+  /* Both of these name the instance out loud, one in a Sitemap line and one in
+   * every entry, so they are filled in on the way out rather than served off the
+   * disk as the build left them. */
+  app.get("/robots.txt", served("robots.txt", "text/plain; charset=utf-8"));
+  app.get(
+    "/sitemap.xml",
+    served("sitemap.xml", "application/xml; charset=utf-8")
+  );
 
   app.use("/*", serveStatic({ root: WEB_BUILD }));
 
   // Everything left is a client-rendered route, which in practice means a
   // secret's address. It gets the empty shell, never the homepage's markup.
-  app.get("*", document("shell.html"));
+  const shell = served("shell.html", HTML);
+
+  app.get("*", (c) =>
+    NAMES_A_FILE.test(new URL(c.req.url).pathname)
+      ? c.text("not found", NOT_FOUND)
+      : shell(c)
+  );
 }
 
 export { app };
