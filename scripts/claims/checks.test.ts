@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bannedClaims,
+  cardCopy,
   describedAs,
   documentedVariables,
   type Finding,
@@ -300,6 +301,53 @@ describe("what a page says about itself", () => {
         describedAs(html).flatMap((said) => unlabelledClaims("seeded", said))
       )
     ).toEqual(['says "End-to-end" out of sight of the caveat']);
+  });
+});
+
+describe("what a share card says", () => {
+  it("reads the headline, the summary and the image description", () => {
+    const html =
+      '<meta content="Someone sent you a secret." property="og:title">' +
+      '<meta property="og:description" content="It opens once.">' +
+      '<meta content="A dark card." property="og:image:alt">';
+
+    expect(cardCopy(html)).toEqual([
+      "Someone sent you a secret.",
+      "It opens once.",
+      "A dark card.",
+    ]);
+  });
+
+  it("leaves the tags that carry no copy alone", () => {
+    /* og:image is an address and og:image:width is a number. Neither is something
+     * anybody wrote, and a check that read them would be reporting on the build. */
+    const html =
+      '<meta content="https://securesend.dev/og.png" property="og:image">' +
+      '<meta content="1200" property="og:image:width">' +
+      '<meta content="summary_large_image" name="twitter:card">' +
+      '<meta content="website" property="og:type">';
+
+    expect(cardCopy(html)).toEqual([]);
+  });
+
+  it("catches a claim on the one surface a recipient reads first", () => {
+    // The card is read in a chat window by somebody who has not arrived here yet,
+    // and visibleText throws it away with the tag around it.
+    const html = '<meta content="Unhackable secrets." property="og:title">';
+
+    expect(visibleText(html)).not.toContain("Unhackable");
+    expect(
+      whats(cardCopy(html).flatMap((said) => bannedClaims("seeded", said)))
+    ).toEqual(['claims "unhackable"']);
+  });
+
+  it("holds a card to the caveat like any other copy", () => {
+    const html =
+      '<meta content="Zero-knowledge sharing." property="og:description">';
+
+    expect(
+      whats(cardCopy(html).flatMap((said) => unlabelledClaims("seeded", said)))
+    ).toEqual(['says "Zero-knowledge" out of sight of the caveat']);
   });
 });
 

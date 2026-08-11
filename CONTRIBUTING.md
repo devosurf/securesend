@@ -77,6 +77,12 @@ stops it again. It refuses to run against an instance that is already answering
 there, because that instance was built from source that may not be yours: if a
 killed run left one up, `docker compose -f compose.smoke.yaml down`.
 
+`pnpm og` is the one command that is not a gate. It redraws the two share images
+in `apps/web/public` from the tokens and the font files the product already ships,
+and its output is committed. Run it when the design moves, and edit
+`apps/web/social.ts` rather than the pictures: the words on a card and the words in
+the head come from that one table.
+
 ## Where tests go
 
 Four seams, and there is no component-test layer on purpose.

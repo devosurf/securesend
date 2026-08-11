@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    /* It reads the same table vite.config.ts does, and names it the same way. */
+    "allowImportingTsExtensions": true,
+    /* It writes files from Node and draws a document in a browser, so it needs
+     * both sets of types. */
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"]
+}

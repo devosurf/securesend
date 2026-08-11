@@ -147,6 +147,27 @@ export function describedAs(html: string): string[] {
   return matches(html, DESCRIPTION);
 }
 
+/*
+ * The share card's words. Open Graph spells its attribute `property` and Twitter
+ * spells the same idea `name`, so both are matched.
+ */
+const CARD_COPY =
+  /<meta\b(?=[^>]*\b(?:name|property)="(?:og:title|og:description|og:image:alt)")[^>]*\bcontent="([^"]*)"/gi;
+
+/**
+ * What a link preview says, which is copy nobody on the page ever sees.
+ *
+ * The same argument as `describedAs`, one step further out. A card is read in
+ * somebody else's chat window by a person who has not arrived yet, which for most
+ * recipients makes it the first sentence of this product they ever read. It rides
+ * entirely in attributes, so `visibleText` drops it with the tag around it, and it
+ * comes from the build rather than from a route. Both halves of the claims rule
+ * bind it and this is the only place that can read it.
+ */
+export function cardCopy(html: string): string[] {
+  return matches(html, CARD_COPY);
+}
+
 /**
  * Source with its comments removed, because a comment is not a claim.
  *

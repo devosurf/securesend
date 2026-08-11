@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LINKS } from "../../apps/web/src/lib/links";
 import {
   bannedClaims,
+  cardCopy,
   describedAs,
   documentedVariables,
   type Finding,
@@ -66,6 +67,22 @@ const DOCUMENTS = [...PAGES, "shell.html"] as const;
 const BAKED_FRAGMENT = /\/s\/[\w-]+#/;
 /** The document's own script, which is the asset every page needs to boot. */
 const DOCUMENT_SCRIPT = /<script[^>]+src="([^"]+)"/;
+
+/*
+ * A card's image and a page's canonical link, once this process has named itself
+ * in them.
+ *
+ * Both are written by the build as a placeholder, because the container that ships
+ * is the same one a self-hoster runs and it cannot know what it will be called.
+ * These match the shape of the result rather than the spelling of the placeholder,
+ * so a rename on either side of that contract fails here rather than shipping
+ * cards that point at an address which does not resolve.
+ */
+const CARD_IMAGE =
+  /<meta content="https?:\/\/[^"]+\/og\.png" property="og:image">/;
+const SECRET_CARD_IMAGE =
+  /<meta content="https?:\/\/[^"]+\/og-secret\.png" property="og:image">/;
+const CANONICAL = /<link href="https?:\/\/[^"]+" rel="canonical">/;
 
 function report(findings: readonly Finding[]): string[] {
   return findings.map(({ where, what }) => `${where}: ${what}`);
@@ -218,16 +235,47 @@ describe("what the surfaces claim", () => {
     /* The description is the one line of copy a reader never sees on the page and a
      * search result quotes back whole. It rides in an attribute, so visibleText drops
      * it, and it is written by the build rather than by a route, so it is outside every
-     * directory the checks above read as source. Both halves of the rule apply to it. */
+     * directory the checks above read as source. Both halves of the rule apply to it.
+     *
+     * All three documents, the shell included. It is noindex, so its description is
+     * not there for a search result, but a chat client falls back to reading it. */
     const described = documents.flatMap(({ path, text }) =>
       describedAs(text).map((said) => ({ path, said }))
     );
 
-    expect(described.length, "no page describes itself").toBe(PAGES.length);
+    expect(
+      described.length,
+      "a document describes itself twice or not at all"
+    ).toBe(DOCUMENTS.length);
 
     const findings = described.flatMap(({ path, said }) => [
       ...bannedClaims(path, said),
       ...unlabelledClaims(path, said),
+    ]);
+
+    expect(report(findings)).toEqual([]);
+  });
+
+  it("makes no claim we are not allowed to make, on a share card", () => {
+    /* A card is the description one step further out: it is read in somebody else's
+     * chat window by a person who has not arrived yet, which for most recipients makes
+     * it the first sentence of this product they ever see. Every word of it is a line
+     * one of these pages already says, and the rule binds it either way. */
+    const said = documents.flatMap(({ path, text }) =>
+      cardCopy(text).map((copy) => ({ copy, path }))
+    );
+
+    /* A headline, a summary and an image description on each of the three. An empty
+     * list here would mean the head quietly stopped being written, which is how this
+     * would break without anybody noticing: a card nobody drew is a link that looks
+     * wrong in a chat window, not a build that fails. */
+    expect(said.length, "no document carries a card").toBe(
+      DOCUMENTS.length * 3
+    );
+
+    const findings = said.flatMap(({ copy, path }) => [
+      ...bannedClaims(path, copy),
+      ...unlabelledClaims(path, copy),
     ]);
 
     expect(report(findings)).toEqual([]);
@@ -266,14 +314,19 @@ describe("the url fragment", () => {
 });
 
 /*
- * The headers, on the running app, with the web build where the container puts it.
+ * The running app, with the web build where the container puts it.
  *
- * The api's own header tests cover every route class, but they run with no build
- * present, so a page route is a 404 there and the static path is exercised through
- * a stand-in. This is the other half: the real documents, off disk, through the
+ * The api's own tests cover every route class, but they run with no build present,
+ * so a page route is a 404 there and the static path is exercised through a
+ * stand-in. This is the other half: the real documents, off disk, through the
  * branch production actually takes. Together they are the whole claim.
+ *
+ * Two things are checked here rather than off the build. The headers, because a
+ * header only exists on a response. And what the documents say once they have been
+ * served, because the address in a share card is the one thing the build cannot
+ * know and this process fills in.
  */
-describe("the headers on a built instance", () => {
+describe("a built instance", () => {
   const PUBLIC = join(ROOT, "apps/api/public");
   let staged = false;
   let request: (path: string, init?: RequestInit) => Promise<Response>;
@@ -404,6 +457,42 @@ describe("the headers on a built instance", () => {
     expect(response.headers.get("content-security-policy")).toContain(
       "default-src 'self'"
     );
+  });
+
+  /* What a chat window gets when somebody pastes one of these links. The
+   * substitution is the thing under test: the build leaves a placeholder where an
+   * absolute address belongs and this process is what fills it in. */
+  it.each(["/", "/security"])(
+    "names itself in the card for %s",
+    async (path) => {
+      const document = await (await request(path)).text();
+
+      expect(document).toMatch(CARD_IMAGE);
+      expect(document).toMatch(CANONICAL);
+    }
+  );
+
+  it("gives a secret's address a card and no canonical address", async () => {
+    const document = await (await request("/s/7hK2mQ")).text();
+
+    expect(document).toContain(
+      '<meta content="Someone sent you a secret." property="og:title">'
+    );
+    expect(document).toMatch(SECRET_CARD_IMAGE);
+
+    /* One file is served for every secret there is, so there is no address it
+     * could name that would be true of more than one of them. A canonical link is
+     * a page asking to be filed under an address, and this page asks the opposite:
+     * the noindex two tests up is the whole of what it says about itself. */
+    expect(document).not.toContain('rel="canonical"');
+    expect(document).not.toContain("og:url");
+  });
+
+  it.each(["/og.png", "/og-secret.png"])("serves %s", async (path) => {
+    const response = await request(path);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
   });
 });
 

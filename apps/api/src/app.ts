@@ -1,7 +1,7 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { sql } from "drizzle-orm";
-import { Hono } from "hono";
+import { type Context, type Handler, Hono } from "hono";
 import { compress } from "hono/compress";
 import { createMiddleware } from "hono/factory";
 import { db } from "./db/client";
@@ -76,19 +76,74 @@ export type AppType = typeof app;
 
 app.all("/api/*", (c) => c.json({ error: "not found" }, NOT_FOUND));
 
+/*
+ * The one thing the build could not know: the address this instance answers on.
+ *
+ * A share card's image has to be named absolutely or no chat client will fetch
+ * it, and the honest absolute name is whatever this instance is actually called.
+ * Baking securesend.dev in at build time would put our address on every
+ * self-hoster's cards and send their recipients' clients to our server for the
+ * picture, which is the opposite of what shipping one container is for. So the
+ * build writes this placeholder and the three documents are filled in as they go
+ * out. Spelled the same in apps/web/social.ts, and the audit fails if the two
+ * ever stop agreeing.
+ */
+const ORIGIN = "%ORIGIN%";
+
+/** A scheme a forwarding proxy is allowed to claim. */
+const HTTP = /^https?$/;
+
+/**
+ * What this instance is being called, from the request that arrived.
+ *
+ * The proxy in front terminates TLS, so the connection to this process is plain
+ * http and the scheme has to come from the hop that knows. Only http and https
+ * are taken from that header: everything here ends up inside an attribute, and a
+ * header is a stranger's writing.
+ */
+function originOf(c: Context): string {
+  const { host, protocol } = new URL(c.req.url);
+  const forwarded = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim();
+  const scheme =
+    forwarded && HTTP.test(forwarded) ? forwarded : protocol.slice(0, -1);
+
+  return `${scheme}://${host}`;
+}
+
+function escapeAttribute(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll('"', "&quot;");
+}
+
+/**
+ * One built document, read once at startup and named per request.
+ *
+ * Read once because these are three small files that cannot change while the
+ * process runs, and escaped on the way in because the host is whatever the
+ * request said it was.
+ */
+function document(file: string): Handler {
+  const template = readFileSync(`${WEB_BUILD}/${file}`, "utf8");
+
+  return (c) =>
+    c.html(template.replaceAll(ORIGIN, escapeAttribute(originOf(c))));
+}
+
 // One container serves the built SPA from this same process. In development the
 // build is absent and Vite serves the app instead.
 if (existsSync(WEB_BUILD)) {
   // The two static pages are prerendered, so each one is a document the build
   // already wrote rather than a script tag that becomes one.
-  app.get("/", serveStatic({ path: `${WEB_BUILD}/index.html` }));
-  app.get("/security", serveStatic({ path: `${WEB_BUILD}/security.html` }));
+  app.get("/", document("index.html"));
+  app.get("/security", document("security.html"));
 
   app.use("/*", serveStatic({ root: WEB_BUILD }));
 
   // Everything left is a client-rendered route, which in practice means a
   // secret's address. It gets the empty shell, never the homepage's markup.
-  app.get("*", serveStatic({ path: `${WEB_BUILD}/shell.html` }));
+  app.get("*", document("shell.html"));
 }
 
 export { app };

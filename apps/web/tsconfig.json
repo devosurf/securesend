@@ -1,6 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    /* For vite.config.ts, which has to name social.ts with its extension so the
+     * native config loader can resolve it as a path. Nothing is emitted from
+     * here, so allowing the spelling costs nothing. */
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["node", "vite/client"]
