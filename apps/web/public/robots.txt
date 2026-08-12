@@ -4,7 +4,7 @@
 User-agent: *
 Disallow: /s/
 
-# The two pages that are meant to be found. The address is filled in by the
+# The pages that are meant to be found. The address is filled in by the
 # instance serving this, because a Sitemap line has to be absolute and the build
 # does not know what this instance is called.
 Sitemap: %ORIGIN%/sitemap.xml

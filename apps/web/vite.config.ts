@@ -27,8 +27,8 @@ const API_PORT = 3000;
  * file rather than here because the script that draws the share images reads the
  * same table, and copy that two things quote had better have one home.
  *
- * Three documents come out of that table. Two are the pages meant to be found,
- * rendered to markup. The third is the shell every client-rendered route gets:
+ * Four documents come out of that table. Three are the pages meant to be found,
+ * rendered to markup. The last is the shell every client-rendered route gets:
  * the same assets with an empty root. A secret route must not be served the
  * homepage's markup, both because a flash of "Send a secret" is the wrong thing
  * to show somebody opening a link and because hydration would have to throw it
@@ -125,9 +125,9 @@ function head(surface: Surface): string[] {
 }
 
 /**
- * The two pages meant to be found, listed for a crawler.
+ * The pages meant to be found, listed for a crawler.
  *
- * No `lastmod` on either entry. It is the field a generator reaches for and the
+ * No `lastmod` on any entry. It is the field a generator reaches for and the
  * one it is most likely to lie about: the honest value is when the words on the
  * page last changed, which a build that reruns on every deploy does not know. A
  * missing field costs nothing, and a wrong one teaches a crawler to ignore the

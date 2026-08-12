@@ -99,9 +99,11 @@ Four seams, and there is no component-test layer on purpose.
    stayed out of a request it never received.
 4. **One thin Playwright smoke** over the built container, in `e2e/`, for what
    genuinely needs a browser: the fragment through a real address bar, the
-   clipboard, a download, the durations the design fixes the moves at, and the
-   Lighthouse score. Three journeys, and each one is a whole handover rather than a
-   step.
+   clipboard, a download, the durations the design fixes the moves at, the
+   Lighthouse score, and whether a page fits the phone it is read on. Three
+   journeys, and each one is a whole handover rather than a step. That last item
+   is only whether a page scrolls sideways at 390, never what the page says: the
+   words, and the nav they sit under, belong to the claims audit.
 
 Two things sit beside the four rather than inside them, and AGENTS.md explains why
 each is a licence rather than an invitation. `apps/api/src/limits` drives its token

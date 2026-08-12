@@ -155,10 +155,11 @@ const NAMES_A_FILE = /\.[^./]+$/;
 // One container serves the built SPA from this same process. In development the
 // build is absent and Vite serves the app instead.
 if (existsSync(WEB_BUILD)) {
-  // The two static pages are prerendered, so each one is a document the build
+  // The static pages are prerendered, so each one is a document the build
   // already wrote rather than a script tag that becomes one.
   app.get("/", served("index.html", HTML));
   app.get("/security", served("security.html", HTML));
+  app.get("/integrations", served("integrations.html", HTML));
 
   /* Both of these name the instance out loud, one in a Sitemap line and one in
    * every entry, so they are filled in on the way out rather than served off the

@@ -11,6 +11,7 @@ import { cn } from "../lib/utils";
 import { buttonVariants } from "../ui/button";
 import { Collapse } from "../ui/collapse";
 import { Icon } from "../ui/icon";
+import { SiteNav } from "../ui/site-nav";
 import { TextLink } from "../ui/text-link";
 import { Wordmark } from "../ui/wordmark";
 import { DeviceMemory } from "../watch/memory";
@@ -433,30 +434,7 @@ function Page() {
         className="pointer-events-none absolute inset-0 h-dvh [background:var(--wash-accent)] md:h-[900px]"
       />
 
-      <nav className="relative flex shrink-0 items-center justify-between px-5 pt-7 md:px-16 md:pt-10">
-        <RouteLink to="/" tone="quiet" viewTransition>
-          <Wordmark />
-        </RouteLink>
-        <div className="flex items-center gap-8">
-          <RouteLink
-            className="text-small"
-            to="/security"
-            tone="quiet"
-            viewTransition
-          >
-            Security
-          </RouteLink>
-          {/* An in-page anchor: the footer is where the self-host story starts,
-           * and it is on this page. */}
-          <TextLink
-            className="hidden text-small md:inline"
-            href="#self-host"
-            tone="quiet"
-          >
-            Self-host
-          </TextLink>
-        </div>
-      </nav>
+      <SiteNav />
 
       {/* The scroll region on a phone, and no box at all at a desk. */}
       <div className="min-h-0 flex-1 overflow-y-auto md:contents">
@@ -552,10 +530,7 @@ function Page() {
         </main>
 
         {/* ---- the footer, and the repository ------------------------------- */}
-        <footer
-          className="mt-12 border-hairline border-t px-5 pt-10 pb-10 md:mt-0 md:px-16 md:py-16"
-          id="self-host"
-        >
+        <footer className="mt-12 border-hairline border-t px-5 pt-10 pb-10 md:mt-0 md:px-16 md:py-16">
           <div className="mx-auto max-w-[1000px] md:flex md:items-end md:justify-between md:gap-10">
             <div className="md:max-w-[420px]">
               <Wordmark />

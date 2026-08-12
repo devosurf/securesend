@@ -11,6 +11,7 @@ import {
   documentedVariables,
   type Finding,
   inlineCode,
+  navFindings,
   offOriginInStylesheet,
   offOriginLoads,
   repositoryDestinations,
@@ -32,7 +33,7 @@ import {
  * to be set, because it drives the real api and the api validates its environment
  * on import, but it never queries: the audit passes with the database stopped.
  *
- * Six claims, each one something a page says out loud and invites a reader to go
+ * Seven claims, each one something a page says out loud and invites a reader to go
  * and check:
  *
  *   1 the pages and the stylesheet fetch nothing from another origin, and nothing
@@ -43,6 +44,8 @@ import {
  *   4 the headers ride every class of response, including the built pages
  *   5 .env.example documents every variable the process reads
  *   6 every repository destination the interface links to exists
+ *   7 every page meant to be found wears the same nav, and none of them links to
+ *     the page it is on
  *
  * The checks themselves are proven against seeded violations in `checks.test.ts`.
  *
@@ -57,11 +60,28 @@ const WEB_DIST = join(ROOT, "apps/web/dist");
 /** The only place the process may read its environment. */
 const ENV_MODULE = ["apps/api/src/env.ts"] as const;
 
-/** The two pages meant to be found, which are the two carrying a description. */
-const PAGES = ["index.html", "security.html"] as const;
+/**
+ * Every page meant to be found: the file the build wrote, the address it answers
+ * on, and which nav item it is.
+ *
+ * One table rather than three lists, because a page added to one of them and
+ * forgotten in the others is a page half of this audit stops reading, and the
+ * half that stopped is the half that reports nothing wrong.
+ */
+const PAGES = [
+  { at: "/", file: "index.html", here: null },
+  { at: "/security", file: "security.html", here: "Security" },
+  { at: "/integrations", file: "integrations.html", here: "Integrations" },
+] as const;
 
-/** The three documents the api serves: the two pages and the empty shell. */
-const DOCUMENTS = [...PAGES, "shell.html"] as const;
+/** Every document the api serves: the pages meant to be found, and the shell. */
+const DOCUMENTS: readonly string[] = [
+  ...PAGES.map(({ file }) => file),
+  "shell.html",
+];
+
+/** The addresses those pages answer on, for the checks that make a request. */
+const FINDABLE = PAGES.map(({ at }) => at);
 
 /** A secret link, key and all, in a file the build wrote. */
 const BAKED_FRAGMENT = /\/s\/[\w-]+#/;
@@ -369,20 +389,17 @@ describe("a built instance", () => {
     }
   });
 
-  it.each(["/", "/security"])(
-    "serves %s with its words in it",
-    async (path) => {
-      const response = await request(path);
+  it.each(FINDABLE)("serves %s with its words in it", async (path) => {
+    const response = await request(path);
 
-      expect(response.status).toBe(200);
-      /* "View source and count" has to mean something, and it cannot if the body
-       * arrives as a script tag. An empty root would be the shell being served here
-       * instead of the page the build rendered. */
-      expect(await response.text()).not.toContain('<div id="root"></div>');
-    }
-  );
+    expect(response.status).toBe(200);
+    /* "View source and count" has to mean something, and it cannot if the body
+     * arrives as a script tag. An empty root would be the shell being served here
+     * instead of the page the build rendered. */
+    expect(await response.text()).not.toContain('<div id="root"></div>');
+  });
 
-  it.each(["/", "/security", "/s/7hK2mQ", "/api/secrets/7hK2mQ"])(
+  it.each([...FINDABLE, "/s/7hK2mQ", "/api/secrets/7hK2mQ"])(
     "locks down %s",
     async (path) => {
       const policy = (await request(path)).headers.get(
@@ -398,7 +415,7 @@ describe("a built instance", () => {
     }
   );
 
-  it.each(["/", "/security", "/s/7hK2mQ", "/api/secrets/7hK2mQ"])(
+  it.each([...FINDABLE, "/s/7hK2mQ", "/api/secrets/7hK2mQ"])(
     "sends no referrer and no cookie from %s",
     async (path) => {
       const response = await request(path);
@@ -470,15 +487,12 @@ describe("a built instance", () => {
   /* What a chat window gets when somebody pastes one of these links. The
    * substitution is the thing under test: the build leaves a placeholder where an
    * absolute address belongs and this process is what fills it in. */
-  it.each(["/", "/security"])(
-    "names itself in the card for %s",
-    async (path) => {
-      const document = await (await request(path)).text();
+  it.each(FINDABLE)("names itself in the card for %s", async (path) => {
+    const document = await (await request(path)).text();
 
-      expect(document).toMatch(CARD_IMAGE);
-      expect(document).toMatch(CANONICAL);
-    }
-  );
+    expect(document).toMatch(CARD_IMAGE);
+    expect(document).toMatch(CANONICAL);
+  });
 
   it("gives a secret's address a card and no canonical address", async () => {
     const document = await (await request("/s/7hK2mQ")).text();
@@ -553,14 +567,13 @@ describe("a built instance", () => {
     expect(robots).toContain("Disallow: /s/");
   });
 
-  it("lists both pages in the sitemap and no secret", async () => {
+  it("lists every findable page in the sitemap and no secret", async () => {
     const response = await request("/sitemap.xml");
     const map = await response.text();
 
     expect(response.headers.get("content-type")).toContain("application/xml");
     expect([...map.matchAll(SITEMAP_LOC)].map(([, at]) => at)).toEqual([
-      "/",
-      "/security",
+      ...FINDABLE,
     ]);
     /* A sitemap is an invitation to crawl every address in it, so a secret's
      * address appearing here would undo the header, the document and robots.txt
@@ -592,6 +605,28 @@ describe("the example environment file", () => {
 
     expect(report(strayEnvReaders(code, ENV_MODULE))).toEqual([]);
   });
+});
+
+describe("the nav on every page meant to be found", () => {
+  /*
+   * Each of these pages is rendered on its own in the build's second pass, so
+   * nothing else in the build would notice one of them wearing a different set of
+   * destinations, or a different order, or offering a press that goes nowhere
+   * because it points at the page it is already on. A reader moving between them
+   * would notice all three.
+   */
+  it.each(PAGES)(
+    "carries the three destinations on $file",
+    ({ file, here }) => {
+      const page = documents.find(({ path }) => path.endsWith(`/${file}`));
+
+      if (!page) {
+        throw new Error(`${file} was not read`);
+      }
+
+      expect(report(navFindings(file, page.text, here))).toEqual([]);
+    }
+  );
 });
 
 describe("where the interface sends a reader", () => {

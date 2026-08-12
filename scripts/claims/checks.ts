@@ -327,6 +327,96 @@ export function unlabelledClaims(where: string, text: string): Finding[] {
     }));
 }
 
+/*
+ * The nav, which is the one thing every page meant to be found has to agree on.
+ *
+ * Each of these pages is rendered on its own in the build's second pass, so
+ * nothing about the build would notice one of them quietly wearing a different
+ * set of destinations, or wearing them in a different order. What a reader would
+ * notice is a nav that changes under them as they move around the site, which
+ * reads as three pages somebody stapled together.
+ *
+ * The other half is the rule that a nav item never links to the page it is on. A
+ * press that does nothing is worse than an absent affordance, and the page you are
+ * standing on is the one place a nav can offer one by accident.
+ */
+
+/** The three destinations, in the order every page carries them. */
+const NAV = ["Integrations", "Security", "Self-host"] as const;
+
+/** The mark, which is a destination too and is not one of the three. */
+const WORDMARK = "SecureSend";
+
+const NAV_ELEMENT = /<nav\b[^>]*>([\s\S]*?)<\/nav>/i;
+
+/**
+ * One thing in the nav: a link, or the page the nav is standing on.
+ *
+ * Two alternatives in one pattern rather than two passes, because which of them a
+ * destination is said with is half of what is being checked and the order of them
+ * is the other half.
+ */
+const NAV_ITEM =
+  /<a\b[^>]*>([\s\S]*?)<\/a>|<span\b(?=[^>]*\baria-current="page")[^>]*>([\s\S]*?)<\/span>/gi;
+
+interface NavItem {
+  label: string;
+  /** Whether it is a link. The current page is a span, so this is false there. */
+  link: boolean;
+}
+
+function navItems(html: string): NavItem[] | null {
+  const nav = NAV_ELEMENT.exec(html)?.[1];
+
+  if (nav === undefined) {
+    return null;
+  }
+
+  return [...nav.matchAll(NAV_ITEM)]
+    .map(([, linked, here]) => ({
+      label: visibleText(linked ?? here ?? "").trim(),
+      link: linked !== undefined,
+    }))
+    .filter(({ label }) => label !== WORDMARK);
+}
+
+/**
+ * A page whose nav is not the nav, or which links to itself.
+ *
+ * `here` is the label of the destination this page is, or null for a page that is
+ * in the nav's reach but not in the nav, which is what the homepage is.
+ */
+export function navFindings(
+  where: string,
+  html: string,
+  here: string | null
+): Finding[] {
+  const items = navItems(html);
+
+  if (items === null) {
+    return [{ what: "carries no nav", where }];
+  }
+
+  const said = items.map(({ label }) => label).join(", ");
+
+  if (said !== NAV.join(", ")) {
+    return [{ what: `navigates to "${said}"`, where }];
+  }
+
+  return items.flatMap(({ label, link }) =>
+    link === (label !== here)
+      ? []
+      : [
+          {
+            what: link
+              ? `links to "${label}", which is the page it is on`
+              : `does not link to "${label}"`,
+            where,
+          },
+        ]
+  );
+}
+
 /** A file the audit reads, named the way a failure should name it. */
 export interface Source {
   /** Relative to the repository root, so a finding is something greppable. */

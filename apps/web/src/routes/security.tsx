@@ -7,8 +7,8 @@ import { buttonVariants } from "../ui/button";
 import { Icon } from "../ui/icon";
 import { LinkSpecimen } from "../ui/link-specimen";
 import { Panel } from "../ui/panel";
+import { SiteNav } from "../ui/site-nav";
 import { TextLink } from "../ui/text-link";
-import { Wordmark } from "../ui/wordmark";
 
 /*
  * securesend.dev/security is the whole security story, written out.
@@ -160,28 +160,7 @@ function Security() {
         className="pointer-events-none absolute inset-0 h-[420px] [background:var(--wash-accent)] md:h-[560px]"
       />
 
-      <nav className="relative flex items-center justify-between px-5 pt-7 md:px-16 md:pt-10">
-        <RouteLink to="/" tone="quiet" viewTransition>
-          <Wordmark />
-        </RouteLink>
-        <div className="flex items-center gap-8">
-          <RouteLink className="text-small" to="/" tone="quiet" viewTransition>
-            Send a secret
-          </RouteLink>
-          {/* The homepage answers this in its own footer, so there it is an
-           * in-page anchor. This page has no such section, and an anchor to an id
-           * it does not have would scroll nowhere. The self-hosting story is
-           * repository markdown either way. */}
-          <TextLink
-            className="hidden text-small md:inline"
-            href={LINKS.selfHosting}
-            tone="quiet"
-            {...OUTBOUND}
-          >
-            Self-host
-          </TextLink>
-        </div>
-      </nav>
+      <SiteNav current="Security" />
 
       <main className="relative px-5 md:px-16">
         <div className="mx-auto max-w-[1000px]">

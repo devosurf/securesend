@@ -60,9 +60,9 @@ export interface Card {
 
 /**
  * Two cards, because there are two things a link can be: the product, and one
- * secret somebody was sent. /security shares the product's card. Its own
- * headline still rides in og:title, so the card is a brand plate under a
- * heading that says which page this is.
+ * secret somebody was sent. /security and /integrations share the product's
+ * card. Their own headlines still ride in og:title, so the card is a brand plate
+ * under a heading that says which page this is.
  */
 export const CARDS = {
   product: {
@@ -142,6 +142,17 @@ export const SURFACES: readonly Surface[] = [
     summary:
       "The mechanism, the limits, and the things we are not claiming. Written to be checked against the source rather than believed.",
     title: "How this actually works",
+  },
+  {
+    card: CARDS.product,
+    description:
+      "Send a secret from where you already are. What an integration changes is where the errand starts and where the finished link lands.",
+    file: "integrations.html",
+    headline: "Send a secret from where you already are.",
+    path: "/integrations",
+    summary:
+      "What an integration changes is where the errand starts and where the finished link lands.",
+    title: "Send a secret from where you already are",
   },
   {
     card: CARDS.secret,

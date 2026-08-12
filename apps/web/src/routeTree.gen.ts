@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as IntegrationsRouteImport } from './routes/integrations'
 import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SIdRouteImport } from './routes/s.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IntegrationsRoute = IntegrationsRouteImport.update({
+  id: '/integrations',
+  path: '/integrations',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SecurityRoute = SecurityRouteImport.update({
@@ -31,30 +37,34 @@ const SIdRoute = SIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/integrations': typeof IntegrationsRoute
   '/security': typeof SecurityRoute
   '/s/$id': typeof SIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/integrations': typeof IntegrationsRoute
   '/security': typeof SecurityRoute
   '/s/$id': typeof SIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/integrations': typeof IntegrationsRoute
   '/security': typeof SecurityRoute
   '/s/$id': typeof SIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/security' | '/s/$id'
+  fullPaths: '/' | '/integrations' | '/security' | '/s/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/security' | '/s/$id'
-  id: '__root__' | '/' | '/security' | '/s/$id'
+  to: '/' | '/integrations' | '/security' | '/s/$id'
+  id: '__root__' | '/' | '/integrations' | '/security' | '/s/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  IntegrationsRoute: typeof IntegrationsRoute
   SecurityRoute: typeof SecurityRoute
   SIdRoute: typeof SIdRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/integrations': {
+      id: '/integrations'
+      path: '/integrations'
+      fullPath: '/integrations'
+      preLoaderRoute: typeof IntegrationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/security': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  IntegrationsRoute: IntegrationsRoute,
   SecurityRoute: SecurityRoute,
   SIdRoute: SIdRoute,
 }

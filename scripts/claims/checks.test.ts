@@ -6,6 +6,7 @@ import {
   documentedVariables,
   type Finding,
   inlineCode,
+  navFindings,
   offOriginInStylesheet,
   offOriginLoads,
   repositoryDestinations,
@@ -446,6 +447,80 @@ describe("the environment", () => {
     };
 
     expect(strayEnvReaders([file], ENV_MODULE)).toEqual([]);
+  });
+});
+
+describe("the nav", () => {
+  /** The nav as every page meant to be found wears it, standing on nothing. */
+  function nav(...items: string[]): string {
+    return [
+      "<nav>",
+      '<a href="/"><span><svg><path d="M3 4C12 8"/></svg>SecureSend</span></a>',
+      "<div>",
+      ...items,
+      "</div>",
+      "</nav>",
+    ].join("");
+  }
+
+  const INTEGRATIONS = '<a href="/integrations">Integrations</a>';
+  const SECURITY = '<a href="/security">Security</a>';
+  const SELF_HOST = '<a href="https://github.com/x/y">Self-host</a>';
+  const HERE = '<span aria-current="page">Security</span>';
+
+  it("catches a page missing one of the three", () => {
+    expect(
+      whats(navFindings("seeded", nav(SECURITY, SELF_HOST), null))
+    ).toEqual(['navigates to "Security, Self-host"']);
+  });
+
+  it("catches a page carrying them in a different order", () => {
+    expect(
+      whats(navFindings("seeded", nav(SECURITY, INTEGRATIONS, SELF_HOST), null))
+    ).toEqual(['navigates to "Security, Integrations, Self-host"']);
+  });
+
+  it("catches a page with no nav at all", () => {
+    expect(whats(navFindings("seeded", "<main>words</main>", null))).toEqual([
+      "carries no nav",
+    ]);
+  });
+
+  it("catches a nav item that navigates to the page it is on", () => {
+    const html = nav(INTEGRATIONS, SECURITY, SELF_HOST);
+
+    expect(whats(navFindings("seeded", html, "Security"))).toEqual([
+      'links to "Security", which is the page it is on',
+    ]);
+  });
+
+  it("catches a destination that stopped being a link", () => {
+    const html = nav(INTEGRATIONS, HERE, SELF_HOST);
+
+    expect(whats(navFindings("seeded", html, null))).toEqual([
+      'does not link to "Security"',
+    ]);
+  });
+
+  it("leaves a page that is in the nav alone", () => {
+    const html = nav(INTEGRATIONS, HERE, SELF_HOST);
+
+    expect(navFindings("honest", html, "Security")).toEqual([]);
+  });
+
+  it("leaves a page that is not in the nav alone", () => {
+    const html = nav(INTEGRATIONS, SECURITY, SELF_HOST);
+
+    expect(navFindings("honest", html, null)).toEqual([]);
+  });
+
+  it("reads the nav rather than the page under it", () => {
+    /* The footer of every one of these pages carries a link back to the homepage,
+     * and the security page's own body links to four more. A check that read the
+     * document instead of the nav element would count all of them. */
+    const html = `${nav(INTEGRATIONS, SECURITY, SELF_HOST)}<footer><a href="/">Send a secret</a></footer>`;
+
+    expect(navFindings("honest", html, null)).toEqual([]);
   });
 });
 

@@ -21,6 +21,7 @@ const ROUTES = [
   "/api/nothing-here",
   "/",
   "/security",
+  "/integrations",
   "/s/7hK2mQ",
 ] as const;
 
@@ -59,11 +60,14 @@ describe("noindex", () => {
     }
   );
 
-  it.each(["/", "/security"])("leaves %s indexable", async (path) => {
-    const response = await app.request(path);
+  it.each(["/", "/security", "/integrations"])(
+    "leaves %s indexable",
+    async (path) => {
+      const response = await app.request(path);
 
-    expect(response.headers.get("x-robots-tag")).toBeNull();
-  });
+      expect(response.headers.get("x-robots-tag")).toBeNull();
+    }
+  );
 });
 
 /*

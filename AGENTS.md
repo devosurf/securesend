@@ -109,8 +109,15 @@ Four seams, and no component-test layer:
    is the only thing here that runs against the artifact rather than the source.
    `e2e/` covers only what genuinely needs a browser: the fragment through a real
    address bar, the clipboard, a download, the durations the design fixes the moves
-   at, and the Lighthouse score. Three journeys, and each one is a whole handover
-   rather than a step.
+   at, the Lighthouse score, and whether a page fits the phone it is read on.
+   Three journeys, and each one is a whole handover rather than a step.
+
+   The last of those is the newest and the easiest to abuse, so it is written down
+   narrowly: a page either scrolls sideways at 390 or it does not, and only a
+   layout engine can say which. It is not a licence to assert what a page says in
+   a browser. What the words are, and that every page wears the same nav, is read
+   off the built documents by the claims audit below, which is cheaper than a
+   container and stricter than asking whether some text is visible.
 
 A good test exercises external behavior at a public boundary and would survive
 a rewrite of everything behind it.
