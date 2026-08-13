@@ -11,6 +11,8 @@ import { create } from "./secrets/create";
 import { reveal } from "./secrets/reveal";
 import { status } from "./secrets/status";
 import { command } from "./slack/command";
+import { install } from "./slack/install";
+import { interactions } from "./slack/interactions";
 
 const WEB_BUILD = "./public";
 const UNAVAILABLE = 503;
@@ -49,7 +51,8 @@ const api = new Hono()
   .route("/secrets", status)
   .route("/secrets", reveal)
   .route("/secrets", burn)
-  .route("/slack", command);
+  .route("/slack", command)
+  .route("/slack", interactions);
 
 /*
  * The two things every response goes through, in this order.
@@ -69,10 +72,16 @@ const api = new Hono()
  * which is safe because the whole response is one secret's bytes: there is no
  * attacker-chosen text sharing the stream for a length to leak anything about.
  */
+/*
+ * The install handshake sits outside `/api` because it is a destination a person is
+ * sent to rather than a call anything makes: the Add to Slack button opens it, Slack
+ * sends the browser back to it, and both of those are page loads.
+ */
 const app = new Hono()
   .use("*", securityHeaders)
   .use("*", compress())
-  .route("/api", api);
+  .route("/api", api)
+  .route("/slack", install);
 
 export type AppType = typeof app;
 

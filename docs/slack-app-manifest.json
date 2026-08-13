@@ -1,0 +1,38 @@
+{
+  "display_information": {
+    "name": "SecureSend",
+    "description": "Send a one-time secret link to a channel. The secret is typed in a SecureSend window, never in Slack.",
+    "background_color": "#0a0a0a"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "SecureSend",
+      "always_online": false
+    },
+    "slash_commands": [
+      {
+        "command": "/ss",
+        "url": "https://YOUR-INSTANCE.example.com/api/slack/command",
+        "description": "SecureSend: create a one-time secret. Type /ss on its own",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "https://YOUR-INSTANCE.example.com/slack/install/callback"
+    ],
+    "scopes": {
+      "bot": ["commands"]
+    }
+  },
+  "settings": {
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://YOUR-INSTANCE.example.com/api/slack/interactions"
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}
