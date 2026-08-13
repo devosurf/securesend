@@ -6,6 +6,7 @@ import { compress } from "hono/compress";
 import { createMiddleware } from "hono/factory";
 import { db } from "./db/client";
 import { securityHeaders } from "./headers";
+import { originOf } from "./origin";
 import { burn } from "./secrets/burn";
 import { create } from "./secrets/create";
 import { reveal } from "./secrets/reveal";
@@ -100,26 +101,6 @@ app.all("/api/*", (c) => c.json({ error: "not found" }, NOT_FOUND));
  * ever stop agreeing.
  */
 const ORIGIN = "%ORIGIN%";
-
-/** A scheme a forwarding proxy is allowed to claim. */
-const HTTP = /^https?$/;
-
-/**
- * What this instance is being called, from the request that arrived.
- *
- * The proxy in front terminates TLS, so the connection to this process is plain
- * http and the scheme has to come from the hop that knows. Only http and https
- * are taken from that header: everything here ends up inside an attribute, and a
- * header is a stranger's writing.
- */
-function originOf(c: Context): string {
-  const { host, protocol } = new URL(c.req.url);
-  const forwarded = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim();
-  const scheme =
-    forwarded && HTTP.test(forwarded) ? forwarded : protocol.slice(0, -1);
-
-  return `${scheme}://${host}`;
-}
 
 function escapeAttribute(value: string) {
   return value

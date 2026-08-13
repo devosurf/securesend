@@ -52,6 +52,19 @@ describe("readSlackContext", () => {
     expect(readSlackContext(written(CONTEXT))).toStrictEqual(CONTEXT);
   });
 
+  /* The same pair the api's own decoder test spells, and for the same reason: two
+   * decoders that disagree drop a sender back onto the ordinary create surface
+   * with nothing on screen to say why. */
+  it("needs a channel to name, and tolerates a sender without one", () => {
+    expect(
+      readSlackContext(written({ ...CONTEXT, channelName: "" }))
+    ).toBeNull();
+
+    const anonymous = { ...CONTEXT, senderName: "" };
+
+    expect(readSlackContext(written(anonymous))).toStrictEqual(anonymous);
+  });
+
   it("reads a channel name with a space and a workspace name with punctuation", () => {
     const odd = { ...CONTEXT, channelName: "eng infra", senderName: "Ada L." };
 

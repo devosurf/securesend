@@ -48,9 +48,11 @@ pnpm workspace, three packages:
   holds the tokens, the motion vocabulary and the self-hosted fonts, `src/ui` is
   the component kit, `src/lib` holds `cn`, `PhaseSwap` and every outbound
   destination. Build the interface from those, never from raw hex or a rebuilt
-  control. `/`, `/security` and `/integrations` are rendered to HTML at build
-  time by a second pass over `src/prerender.tsx`; every other route is
-  client-rendered and gets an empty shell.
+  control. `/`, `/security`, `/integrations` and `/integrations/slack` are
+  rendered to HTML at build time by a second pass over `src/prerender.tsx`;
+  every other route is client-rendered and gets an empty shell. The list of them
+  lives in `apps/web/social.ts`, which one table feeds: the prerender pass, each
+  document's head, the sitemap and the claims audit.
 - `apps/api`. Hono. Owns the Drizzle schema and the migrations. In production it
   serves the web build from `./public` in the same process.
 - `packages/crypto`. Consumed as TypeScript source inside the workspace, since

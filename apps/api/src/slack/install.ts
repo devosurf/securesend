@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { type Context, Hono } from "hono";
 import { z } from "zod";
 import { env } from "../env";
+import { originOf } from "../origin";
 
 /*
  * The install handshake behind the public Add to Slack button.
@@ -67,23 +68,6 @@ const NONCE_BYTES = 16;
 
 const NO_APP =
   "This instance has no Slack app configured. See docs/slack.md: make your own Slack app from the manifest in this repository, point it at this instance, and set SLACK_SIGNING_SECRET.";
-
-/** A scheme a forwarding proxy is allowed to claim. */
-const HTTP = /^https?$/;
-
-/**
- * What this instance is being called, from the request that arrived. Spelled the
- * same way app.ts and command.ts spell it, because the redirect Slack is sent back
- * to has to be this instance rather than an address baked in at build time.
- */
-function originOf(c: Context): string {
-  const { host, protocol } = new URL(c.req.url);
-  const forwarded = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim();
-  const scheme =
-    forwarded && HTTP.test(forwarded) ? forwarded : protocol.slice(0, -1);
-
-  return `${scheme}://${host}`;
-}
 
 function sign(body: string, key: string): string {
   return createHmac("sha256", key).update(body).digest("hex");

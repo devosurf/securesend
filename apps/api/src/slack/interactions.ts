@@ -113,38 +113,6 @@ function jsonIn(raw: string | null): unknown {
   }
 }
 
-/*
- * The burn, spelled the way burn.ts spells it.
- *
- * Two copies of a claim is worse than one, and this is the second only because the
- * first is welded into a route handler. When burn.ts is next opened this belongs
- * beside it as one function both callers reach.
- *
- * What it must keep is the shape: one transaction takes the row if it is still
- * sealed, so a secret that died some other way is never reclaimed and the next
- * visitor is never told "the sender burned it" about something that had already
- * gone. Attachments go in the same breath, and a second press answers the same way
- * rather than complaining.
- */
-async function burnFromSlack({
-  id,
-  managementToken,
-}: {
-  id: string;
-  managementToken: string;
-}): Promise<SecretStatus | null> {
-  const outcome = await burnSecret({ id, managementToken });
-
-  /* The two refusals are one answer here, and that is the point. This route is
-   * reachable by anyone Slack will sign for, so telling a wrong token apart from
-   * an absent id would turn a button into a way to learn which secrets exist. The
-   * browser's own burn route does tell them apart, because it is already holding
-   * the token that proves which secret it means. */
-  return outcome.kind === "burned" || outcome.kind === "gone"
-    ? outcome.status
-    : null;
-}
-
 /** How long this secret was given, which is the sentence the sender reads. */
 function hoursOf(status: SecretStatus): number {
   return Math.round(
@@ -222,11 +190,22 @@ function controls(status: SecretStatus | null, press: z.infer<typeof pressed>) {
   return replacement(said, offered(status, press));
 }
 
-function actOn(press: z.infer<typeof pressed>): Promise<SecretStatus | null> {
+async function actOn(
+  press: z.infer<typeof pressed>
+): Promise<SecretStatus | null> {
   const { do: intent, id, managementToken } = press;
 
   if (intent === "burn") {
-    return burnFromSlack({ id, managementToken });
+    /* Both refusals become one answer here, and that is the point. Whoever Slack
+     * will sign for can press this, so telling a wrong token apart from an absent
+     * id would turn a button into a way to learn which secrets exist. The browser's
+     * own burn route does tell them apart, because it already holds the token that
+     * proves which secret it means. */
+    const outcome = await burnSecret({ id, managementToken });
+
+    return outcome.kind === "burned" || outcome.kind === "gone"
+      ? outcome.status
+      : null;
   }
 
   return extendSecret({

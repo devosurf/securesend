@@ -247,6 +247,28 @@ describe("what the surfaces claim", () => {
     expect(report(findings)).toEqual([]);
   });
 
+  /*
+   * The copy nobody browsing this repository would think to read, and the reason
+   * it is here: everything else the claims rule guards is a page or a document,
+   * but the Slack integration says things to a person inside somebody else's chat
+   * app. Those sentences live in api source and in a manifest, they are never
+   * rendered into any document this audit already sweeps, and they are the ones a
+   * reader is least able to check for themselves.
+   */
+  it("makes no claim we are not allowed to make, where slack does the talking", async () => {
+    const spoken = [
+      ...(await sources("apps/api/src/slack", isCode)),
+      ...(await files("docs/slack-app-manifest.json")),
+    ];
+
+    expect(spoken.length, "the slack surface reads as empty").toBeGreaterThan(
+      0
+    );
+    expect(
+      report(spoken.flatMap(({ path, text }) => bannedClaims(path, text)))
+    ).toEqual([]);
+  });
+
   it("keeps both strong labels within sight of the caveat, on any page", () => {
     /* The claims rule stated most precisely: zero-knowledge and end-to-end are both
      * true here in a specific sense and read as a much bigger promise, so the

@@ -351,7 +351,7 @@ export function Envelope() {
              * autofocus would be wrong: a stranger reading it has not begun, and
              * a phone would answer with a keyboard nobody asked for. */}
             <SecretArea
-              autoFocus={slack !== undefined}
+              autoFocus={slack !== null}
               className="min-h-[132px] px-5 pt-4 pb-3 md:min-h-[158px] md:pt-5 md:pb-2"
               onBlur={onBlur}
               onChange={(event) => setNote(event.target.value)}

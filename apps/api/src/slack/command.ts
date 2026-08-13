@@ -1,4 +1,5 @@
-import { type Context, Hono } from "hono";
+import { Hono } from "hono";
+import { originOf } from "../origin";
 import { encodeSlackContext } from "./payload";
 import { signedBySlack } from "./verify";
 
@@ -37,28 +38,6 @@ const NOTHING_STORED =
 const NEVER_THROUGH_SLACK =
   "Secrets never travel through Slack. Type it in the SecureSend window and only the finished link comes back here.";
 const CREATE = "Create a secret";
-
-/** A scheme a forwarding proxy is allowed to claim. */
-const HTTP = /^https?$/;
-
-/**
- * What this instance is being called, from the request that arrived.
- *
- * The button's url has to be absolute and a self-hoster is not us, so it is read
- * off the request the same way `originOf` in app.ts reads it for the documents:
- * the proxy in front terminates TLS, so the connection to this process is plain
- * http and the scheme comes from the hop that knows. Only http and https are
- * taken from that header, because a header is a stranger's writing and this one
- * ends up in a link somebody presses.
- */
-function originOf(c: Context): string {
-  const { host, protocol } = new URL(c.req.url);
-  const forwarded = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim();
-  const scheme =
-    forwarded && HTTP.test(forwarded) ? forwarded : protocol.slice(0, -1);
-
-  return `${scheme}://${host}`;
-}
 
 /**
  * One ephemeral reply: what it says, and the one press it offers.
@@ -104,18 +83,19 @@ export const command = new Hono().post("/command", async (c) => {
 
   const form = new URLSearchParams(body);
   const channelId = form.get("channel_id");
+  const channelName = form.get("channel_name");
   const responseUrl = form.get("response_url");
   const teamId = form.get("team_id");
 
   // A signed request that is not a slash command payload. Nothing a caller can
   // do about it, and nothing they are owed beyond being told it was refused.
-  if (!(channelId && responseUrl && teamId)) {
+  if (!(channelId && channelName && responseUrl && teamId)) {
     return c.json({ error: "that is not a slash command" }, BAD_REQUEST);
   }
 
   const context = encodeSlackContext({
     channelId,
-    channelName: form.get("channel_name") ?? "",
+    channelName,
     // Slack's payload carries no issue time and the browser has to know whether
     // the reply handle has gone stale, so it is stamped here.
     issuedAt: Date.now(),

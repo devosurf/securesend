@@ -55,7 +55,10 @@ function isSlackHook(value: string): boolean {
  */
 const slackContext = z.strictObject({
   channelId: z.string().min(1),
-  channelName: z.string(),
+  /* Held to more than a string because the primary button on the other side says
+   * it out loud: "Send to #". The display name below is not, since an absent one
+   * costs a line of copy rather than the errand. The web decoder matches both. */
+  channelName: z.string().min(1),
   issuedAt: z.number().int().positive(),
   responseUrl: z.url().refine(isSlackHook, "not a slack reply handle"),
   senderName: z.string(),

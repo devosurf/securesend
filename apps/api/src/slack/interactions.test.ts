@@ -5,7 +5,13 @@ import { app } from "../app";
 import { closeDatabase } from "../db/client";
 import { env } from "../env";
 import { mintManagementToken } from "../secrets/management";
-import { attachmentRowsOf, countToday, rowOf, seal } from "../secrets/testing";
+import {
+  attachmentRowsOf,
+  countToday,
+  expire,
+  rowOf,
+  seal,
+} from "../secrets/testing";
 
 afterAll(closeDatabase);
 
@@ -191,6 +197,22 @@ describe("POST /api/slack/interactions", () => {
     const again = await replyTo(pressing(sealed, "burn"));
 
     expect(again).toStrictEqual(first);
+  });
+
+  /* A clock that ran out is not a burn, and saying otherwise would tell the next
+   * visitor "the sender destroyed this" about something that had already gone on
+   * its own. The row says which death it died and the message is worded off that. */
+  it("will not claim a burn over a secret whose clock ran out first", async () => {
+    const sealed = await seal();
+    await expire(sealed.id);
+    const before = await countToday("burns");
+
+    const reply = await replyTo(pressing(sealed, "burn"));
+
+    expect(said(reply)).toContain("expired");
+    expect(buttons(reply)).toStrictEqual([]);
+    expect((await rowOf(sealed.id)).burnedAt).toBeNull();
+    expect(await countToday("burns")).toBe(before);
   });
 
   it("counts one burn however many times it is pressed", async () => {

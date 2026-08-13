@@ -50,6 +50,11 @@ export interface SlackContext {
   teamId: string;
 }
 
+/**
+ * A string with something in it. Held to the same rule the api's own encoder is
+ * held to, because a context one side mints and the other refuses is a sender
+ * silently dropped back onto the ordinary create surface with no way to tell why.
+ */
 function named(value: unknown): value is string {
   return typeof value === "string" && value !== "";
 }
@@ -78,7 +83,10 @@ function isContext(value: unknown): value is SlackContext {
     Number.isFinite(issuedAt) &&
     named(responseUrl) &&
     fromSlack(responseUrl) &&
-    named(senderName) &&
+    /* A display name and nothing else, so an absent one costs a line of copy
+     * rather than the whole errand. The channel's name is held to more than this
+     * because the primary button says it out loud. */
+    typeof senderName === "string" &&
     named(teamId)
   );
 }

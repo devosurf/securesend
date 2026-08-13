@@ -75,6 +75,19 @@ describe("the slack fragment payload, refused", () => {
     expect(decodeSlackContext(encoded(null))).toBeNull();
   });
 
+  /* The two decoders have to answer the same way or a sender is dropped back onto
+   * the ordinary create surface with nothing on screen to say why. The channel's
+   * name is required because the primary button says it; the display name is not,
+   * because an absent one costs a line of copy. Spelled on both sides. */
+  it("needs a channel to name, and tolerates a sender without one", () => {
+    expect(
+      decodeSlackContext(encoded({ ...CONTEXT, channelName: "" }))
+    ).toBeNull();
+    expect(
+      decodeSlackContext(encoded({ ...CONTEXT, senderName: "" }))
+    ).toStrictEqual({ ...CONTEXT, senderName: "" });
+  });
+
   it("is no context when a field is missing or the wrong type", () => {
     const { teamId: _dropped, ...missing } = CONTEXT;
 
