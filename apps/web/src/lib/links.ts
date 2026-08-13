@@ -22,14 +22,14 @@ export const LINKS = {
   crypto: `${REPO}/tree/main/packages/crypto`,
   /** Disclosure. */
   security: "mailto:security@securesend.dev",
+  /** One container, one compose file. The self-host story in full. */
+  selfHosting: `${REPO}/blob/main/docs/self-hosting.md`,
   /**
    * The Add to Slack button, on the integrations pages. This instance's own
    * install handshake rather than Slack's, because the scope list and the
    * client id are ours to state and a self-hoster's are theirs.
    */
   slackInstall: "/slack/install",
-  /** One container, one compose file. The self-host story in full. */
-  selfHosting: `${REPO}/blob/main/docs/self-hosting.md`,
   /** The repository itself. "Read the source", "Whole repository". */
   source: REPO,
   /** The long form behind the security page. */

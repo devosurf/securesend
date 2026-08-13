@@ -16,6 +16,9 @@ afterAll(closeDatabase);
  * covered separately at the bottom, because a file handed back by the static
  * middleware is the other kind of response the headers have to survive.
  */
+/** Any origin in the policy that is not the one exception the product allows. */
+const ANY_OTHER_HOST = /https?:\/\/(?!hooks\.slack\.com)/;
+
 const ROUTES = [
   "/api/health",
   "/api/nothing-here",
@@ -53,7 +56,7 @@ describe("the security headers bundle", () => {
     expect(
       directives.filter((directive) => directive.includes("hooks.slack.com"))
     ).toHaveLength(1);
-    expect(policy).not.toMatch(/https?:\/\/(?!hooks\.slack\.com)/);
+    expect(policy).not.toMatch(ANY_OTHER_HOST);
 
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
