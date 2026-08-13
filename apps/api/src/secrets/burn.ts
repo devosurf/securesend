@@ -8,7 +8,7 @@ import { count } from "../db/counters";
 import { secrets } from "../db/schema";
 import { scrubAttachments } from "./attachments";
 import { MANAGEMENT_TOKEN_LENGTH, managesSecret } from "./management";
-import { lookUp, statusOf } from "./state";
+import { lookUp, type SecretStatus, statusOf } from "./state";
 
 /*
  * Burning a secret before anybody reads it.
@@ -41,6 +41,100 @@ const burnBody = z.strictObject({
   managementToken: z.string().length(MANAGEMENT_TOKEN_LENGTH),
 });
 
+/**
+ * What became of the ask. Four answers rather than a status or null, because the
+ * two refusals are not the same thing to a route: this one tells them apart in
+ * its status code, and the Slack one deliberately does not, so neither can be
+ * used to learn which ids exist.
+ */
+export type BurnOutcome =
+  | { kind: "burned"; status: SecretStatus }
+  | { kind: "forbidden" }
+  | { kind: "gone"; status: SecretStatus }
+  | { kind: "not-found" };
+
+/**
+ * Killing a secret, wherever the ask came from.
+ *
+ * Out here rather than inside the route because a sender can now reach this from
+ * two places, their own browser and a button in Slack, and two spellings of a
+ * claim this size is how the two quietly stop agreeing. What either caller gets
+ * is the same row, taken the same way.
+ */
+export async function burnSecret({
+  id,
+  managementToken,
+}: {
+  id: string;
+  managementToken: string;
+}): Promise<BurnOutcome> {
+  const [held] = await db
+    .select({ hash: secrets.managementTokenHash })
+    .from(secrets)
+    .where(eq(secrets.id, id));
+
+  if (!held) {
+    return { kind: "not-found" };
+  }
+  if (!managesSecret(managementToken, held.hash)) {
+    return { kind: "forbidden" };
+  }
+
+  /* One transaction takes the row if it is still sealed. A reveal racing this
+   * holds the same lock, so one of the two wins outright and the loser reads the
+   * row as the other left it. */
+  const burned = await db.transaction(async (tx) => {
+    const [claimed] = await tx
+      .update(secrets)
+      .set({
+        burnedAt: sql`now()`,
+        burnReason: BY_THE_SENDER,
+        envelope: null,
+        envelopeIv: null,
+      })
+      .where(
+        and(
+          eq(secrets.id, id),
+          isNull(secrets.usedAt),
+          isNull(secrets.burnedAt),
+          gt(secrets.expiresAt, sql`now()`)
+        )
+      )
+      .returning({
+        burnedAt: secrets.burnedAt,
+        burnReason: secrets.burnReason,
+        createdAt: secrets.createdAt,
+        expired: sql<boolean>`${secrets.expiresAt} <= now()`,
+        expiresAt: secrets.expiresAt,
+        id: secrets.id,
+        usedAt: secrets.usedAt,
+      });
+
+    if (!claimed) {
+      return null;
+    }
+
+    /* Only once the row is this sender's to kill. Files left standing under a
+     * row already saying the secret was destroyed would be the larger half of it
+     * still sitting on the instance. */
+    await scrubAttachments(tx, id);
+
+    await count(tx, "burns");
+
+    return statusOf(claimed);
+  });
+
+  if (burned) {
+    return { kind: "burned", status: burned };
+  }
+
+  // Nothing was claimed: either this sender has already burned it, or somebody
+  // read it, or its clock ran out. The row says which.
+  const found = await lookUp(id);
+
+  return found ? { kind: "gone", status: found } : { kind: "not-found" };
+}
+
 export const burn = new Hono().post(
   "/:id/burn",
   zValidator("json", burnBody, (result, c) =>
@@ -56,78 +150,24 @@ export const burn = new Hono().post(
       return c.json({ error: "there is nothing at this link" }, NOT_FOUND);
     }
 
-    const [held] = await db
-      .select({ hash: secrets.managementTokenHash })
-      .from(secrets)
-      .where(eq(secrets.id, id));
+    const outcome = await burnSecret({ id, managementToken });
 
-    if (!held) {
-      return c.json({ error: "there is nothing at this link" }, NOT_FOUND);
+    switch (outcome.kind) {
+      case "not-found":
+        return c.json({ error: "there is nothing at this link" }, NOT_FOUND);
+      case "forbidden":
+        return c.json(
+          { error: "that token does not manage this secret" },
+          FORBIDDEN
+        );
+      case "burned":
+        return c.json(outcome.status);
+      default:
+        // It died some other way. The sender's list takes whatever came back, and
+        // a second press on their own burn is not a conflict.
+        return outcome.status.state === "burned"
+          ? c.json(outcome.status)
+          : c.json(outcome.status, CONFLICT);
     }
-    if (!managesSecret(managementToken, held.hash)) {
-      return c.json(
-        { error: "that token does not manage this secret" },
-        FORBIDDEN
-      );
-    }
-
-    /* One transaction takes the row if it is still sealed. A reveal racing this
-     * holds the same lock, so one of the two wins outright and the loser reads the
-     * row as the other left it. */
-    const burned = await db.transaction(async (tx) => {
-      const [claimed] = await tx
-        .update(secrets)
-        .set({
-          burnedAt: sql`now()`,
-          burnReason: BY_THE_SENDER,
-          envelope: null,
-          envelopeIv: null,
-        })
-        .where(
-          and(
-            eq(secrets.id, id),
-            isNull(secrets.usedAt),
-            isNull(secrets.burnedAt),
-            gt(secrets.expiresAt, sql`now()`)
-          )
-        )
-        .returning({
-          burnedAt: secrets.burnedAt,
-          burnReason: secrets.burnReason,
-          createdAt: secrets.createdAt,
-          expired: sql<boolean>`${secrets.expiresAt} <= now()`,
-          expiresAt: secrets.expiresAt,
-          id: secrets.id,
-          usedAt: secrets.usedAt,
-        });
-
-      if (!claimed) {
-        return null;
-      }
-
-      /* Only once the row is this sender's to kill. Files left standing under a
-       * row already saying the secret was destroyed would be the larger half of it
-       * still sitting on the instance. */
-      await scrubAttachments(tx, id);
-
-      await count(tx, "burns");
-
-      return statusOf(claimed);
-    });
-
-    if (burned) {
-      return c.json(burned);
-    }
-
-    // Nothing was claimed: either this sender has already burned it, or somebody
-    // read it, or its clock ran out. The row says which, and the sender's list
-    // takes whatever came back.
-    const found = await lookUp(id);
-
-    if (!found) {
-      return c.json({ error: "there is nothing at this link" }, NOT_FOUND);
-    }
-
-    return found.state === "burned" ? c.json(found) : c.json(found, CONFLICT);
   }
 );

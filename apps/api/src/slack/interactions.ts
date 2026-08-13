@@ -1,19 +1,10 @@
 import { isSecretId } from "@securesend/crypto/ids";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
-import { db } from "../db/client";
-import { count } from "../db/counters";
-import { secrets } from "../db/schema";
-import { scrubAttachments } from "../secrets/attachments";
+import { burnSecret } from "../secrets/burn";
 import { type ExtendTarget, extendSecret } from "../secrets/extend";
-import { MANAGEMENT_TOKEN_LENGTH, managesSecret } from "../secrets/management";
-import {
-  lookUp,
-  type SecretState,
-  type SecretStatus,
-  statusOf,
-} from "../secrets/state";
+import { MANAGEMENT_TOKEN_LENGTH } from "../secrets/management";
+import type { SecretState, SecretStatus } from "../secrets/state";
 import { signedBySlack } from "./verify";
 
 /*
@@ -57,8 +48,6 @@ const BAD_REQUEST = 400;
 const UNAUTHORIZED = 401;
 
 const AN_HOUR_MS = 60 * 60 * 1000;
-
-const BY_THE_SENDER = "sender";
 
 /*
  * The copy, from slack--posted on the design canvas. Two of these lines are not on
@@ -137,66 +126,23 @@ function jsonIn(raw: string | null): unknown {
  * gone. Attachments go in the same breath, and a second press answers the same way
  * rather than complaining.
  */
-async function burnSecret({
+async function burnFromSlack({
   id,
   managementToken,
 }: {
   id: string;
   managementToken: string;
 }): Promise<SecretStatus | null> {
-  const [held] = await db
-    .select({ hash: secrets.managementTokenHash })
-    .from(secrets)
-    .where(eq(secrets.id, id));
+  const outcome = await burnSecret({ id, managementToken });
 
-  if (!(held && managesSecret(managementToken, held.hash))) {
-    return null;
-  }
-
-  const burned = await db.transaction(async (tx) => {
-    const [claimed] = await tx
-      .update(secrets)
-      .set({
-        burnedAt: sql`now()`,
-        burnReason: BY_THE_SENDER,
-        envelope: null,
-        envelopeIv: null,
-      })
-      .where(
-        and(
-          eq(secrets.id, id),
-          isNull(secrets.usedAt),
-          isNull(secrets.burnedAt),
-          gt(secrets.expiresAt, sql`now()`)
-        )
-      )
-      .returning({
-        burnedAt: secrets.burnedAt,
-        burnReason: secrets.burnReason,
-        createdAt: secrets.createdAt,
-        expired: sql<boolean>`${secrets.expiresAt} <= now()`,
-        expiresAt: secrets.expiresAt,
-        id: secrets.id,
-        usedAt: secrets.usedAt,
-      });
-
-    if (!claimed) {
-      return null;
-    }
-
-    /* Only once the row is this sender's to kill. Files left standing under a row
-     * already saying the secret was destroyed would be the larger half of it still
-     * sitting on the instance. */
-    await scrubAttachments(tx, id);
-
-    await count(tx, "burns");
-
-    return statusOf(claimed);
-  });
-
-  // Nothing was claimed: this sender already burned it, or somebody read it, or its
-  // clock ran out. The row says which, and the message is worded off that.
-  return burned ?? (await lookUp(id));
+  /* The two refusals are one answer here, and that is the point. This route is
+   * reachable by anyone Slack will sign for, so telling a wrong token apart from
+   * an absent id would turn a button into a way to learn which secrets exist. The
+   * browser's own burn route does tell them apart, because it is already holding
+   * the token that proves which secret it means. */
+  return outcome.kind === "burned" || outcome.kind === "gone"
+    ? outcome.status
+    : null;
 }
 
 /** How long this secret was given, which is the sentence the sender reads. */
@@ -280,7 +226,7 @@ function actOn(press: z.infer<typeof pressed>): Promise<SecretStatus | null> {
   const { do: intent, id, managementToken } = press;
 
   if (intent === "burn") {
-    return burnSecret({ id, managementToken });
+    return burnFromSlack({ id, managementToken });
   }
 
   return extendSecret({
