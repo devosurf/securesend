@@ -2,6 +2,8 @@ import { type FileToSeal, sealEnvelope } from "@securesend/crypto/envelope";
 import type { InferRequestType } from "hono/client";
 import { apiClient, type ClientOptions } from "../api/client";
 import { readRefusal, type Scope, TOO_MANY } from "../api/refusal";
+import type { SlackContext } from "../slack/payload";
+import { postToChannel } from "../slack/post-back";
 import { browserMemory, type Kept, remember } from "./remember";
 
 /*
@@ -11,6 +13,12 @@ import { browserMemory, type Kept, remember } from "./remember";
  * and an id, encrypts the envelope under them, posts the ciphertext, and keeps
  * the management token the instance hands back. The key never goes into the
  * request. It goes into the link, after the hash, which browsers do not send.
+ *
+ * A sender who arrived from a channel has one more step, and it is here rather
+ * than on the screen for the same reason the rest of it is: the finished link is
+ * the key, so this browser posts it to Slack itself and the instance is never
+ * handed it. The management token goes to the channel's private controls in the
+ * same moment and never leaves this function otherwise.
  *
  * The id is the client's, so a collision is the client's to fix: the instance
  * refuses the insert and this seals again under a fresh id and a fresh key.
@@ -149,6 +157,11 @@ export interface SecretLink {
 
 /** What this module talks to, so a test can hand it somewhere else to talk. */
 export interface Surroundings extends ClientOptions {
+  /**
+   * The channel the finished link is going to, when the sender arrived from one.
+   * Absent is the ordinary crossing, where the link goes nowhere but the screen.
+   */
+  slack?: SlackContext | undefined;
   storage?: Kept | undefined;
 }
 
@@ -308,9 +321,24 @@ export async function sealAndSend(
       );
     }
 
+    const href = `${origin}/s/${id}#${sealed.fragmentToken}`;
+
+    /* The channel, after the instance has answered and not before: a post about a
+     * secret the instance refused would be a link to nothing. Nothing is awaited,
+     * because the answer is opaque and there is nothing to learn from it. */
+    if (around.slack) {
+      postToChannel({
+        context: around.slack,
+        expiry: draft.expiry,
+        id,
+        link: href,
+        managementToken: answer.managementToken,
+      });
+    }
+
     return {
       expiresAt: answer.expiresAt,
-      href: `${origin}/s/${id}#${sealed.fragmentToken}`,
+      href,
       id,
       shown: `${origin.replace(SCHEME, "")}/s/${id}#${sealed.fragmentToken}`,
     };

@@ -1,6 +1,7 @@
 import { openEnvelope } from "@securesend/crypto/envelope";
 import { decodeFragmentToken } from "@securesend/crypto/fragment";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import type { SlackContext } from "../slack/payload";
 import {
   MAX_ATTACHMENTS,
   MAX_ENVELOPE_BYTES,
@@ -29,7 +30,11 @@ const SERVER_ERROR = 500;
 /** The iv's length in base64url characters, which the api's schema fixes. */
 const IV_CHARS = 16;
 
-const EXPIRES = "2026-08-04T12:00:00.000Z";
+/* A day out, and reckoned from now rather than written down. This browser forgets
+ * what it sent a week past its expiry, so a fixed date makes the memory tests pass
+ * for a week and then fail forever. */
+const DAY_MS = 86_400_000;
+const EXPIRES = new Date(Date.now() + DAY_MS).toISOString();
 
 function created(id: string, managementToken = "a-management-token") {
   return Response.json(
@@ -576,5 +581,82 @@ describe("sealAndSend, with files", () => {
     );
 
     expect(link.href).toContain("#");
+  });
+});
+
+/*
+ * The crossing a sender makes from a Slack channel.
+ *
+ * Two things fetch here and they are deliberately not the same thing. The
+ * instance's client is handed in, so the fake instance above sees the ciphertext.
+ * Slack is posted to by the browser itself, so it lands on the global, and the
+ * separation in this file is the separation the claim is made of: the channel gets
+ * the key, and the instance holding the secret never does.
+ */
+describe("sealAndSend, from a Slack channel", () => {
+  const CONTEXT: SlackContext = {
+    channelId: "C024BE91L",
+    channelName: "eng-infra",
+    issuedAt: 1_700_000_000_000,
+    responseUrl: "https://hooks.slack.com/commands/T0001/1234/abcd",
+    senderName: "Marta Ek",
+    teamId: "T0001",
+  };
+
+  const real = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = real;
+  });
+
+  /** Everything the browser posted to Slack itself, rather than through the api. */
+  function slack(): string[] {
+    const posted: string[] = [];
+
+    globalThis.fetch = (_input, init) => {
+      posted.push(String(init?.body ?? ""));
+      return Promise.resolve(new Response(null, { status: 200 }));
+    };
+
+    return posted;
+  }
+
+  it("posts the finished link to the channel, and the key nowhere else", async () => {
+    const posted = slack();
+    const { server, world } = around((attempt) => created(`id-${attempt}`));
+
+    const link = await sealAndSend(
+      { expiry: "24h", note: "the door code is 4417" },
+      { ...world, slack: { ...CONTEXT, issuedAt: Date.now() } }
+    );
+    const key = link.href.split("#")[1] ?? "";
+
+    expect(key).not.toBe("");
+    expect(await sent(server.asked)).not.toContain(key);
+    expect(posted).toHaveLength(2);
+    expect(posted.filter((body) => body.includes(key))).toHaveLength(1);
+  });
+
+  it("posts nothing to Slack when the sender came from nowhere", async () => {
+    const posted = slack();
+    const { world } = around((attempt) => created(`id-${attempt}`));
+
+    await sealAndSend({ expiry: "24h", note: "hi" }, world);
+
+    expect(posted).toStrictEqual([]);
+  });
+
+  it("posts nothing once the channel's reply handle is past its window", async () => {
+    const posted = slack();
+    const { world } = around((attempt) => created(`id-${attempt}`));
+
+    const link = await sealAndSend(
+      { expiry: "24h", note: "hi" },
+      { ...world, slack: CONTEXT }
+    );
+
+    // The link is still made and still handed back. It just goes nowhere by itself.
+    expect(link.href).toContain("#");
+    expect(posted).toStrictEqual([]);
   });
 });

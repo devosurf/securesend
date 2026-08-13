@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as IntegrationsRouteImport } from './routes/integrations'
+import { Route as NewRouteImport } from './routes/new'
 import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SIdRouteImport } from './routes/s.$id'
 
@@ -22,6 +23,11 @@ const IndexRoute = IndexRouteImport.update({
 const IntegrationsRoute = IntegrationsRouteImport.update({
   id: '/integrations',
   path: '/integrations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NewRoute = NewRouteImport.update({
+  id: '/new',
+  path: '/new',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SecurityRoute = SecurityRouteImport.update({
@@ -38,12 +44,14 @@ const SIdRoute = SIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/integrations': typeof IntegrationsRoute
+  '/new': typeof NewRoute
   '/security': typeof SecurityRoute
   '/s/$id': typeof SIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/integrations': typeof IntegrationsRoute
+  '/new': typeof NewRoute
   '/security': typeof SecurityRoute
   '/s/$id': typeof SIdRoute
 }
@@ -51,20 +59,22 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/integrations': typeof IntegrationsRoute
+  '/new': typeof NewRoute
   '/security': typeof SecurityRoute
   '/s/$id': typeof SIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/integrations' | '/security' | '/s/$id'
+  fullPaths: '/' | '/integrations' | '/new' | '/security' | '/s/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/integrations' | '/security' | '/s/$id'
-  id: '__root__' | '/' | '/integrations' | '/security' | '/s/$id'
+  to: '/' | '/integrations' | '/new' | '/security' | '/s/$id'
+  id: '__root__' | '/' | '/integrations' | '/new' | '/security' | '/s/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   IntegrationsRoute: typeof IntegrationsRoute
+  NewRoute: typeof NewRoute
   SecurityRoute: typeof SecurityRoute
   SIdRoute: typeof SIdRoute
 }
@@ -83,6 +93,13 @@ declare module '@tanstack/react-router' {
       path: '/integrations'
       fullPath: '/integrations'
       preLoaderRoute: typeof IntegrationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/new': {
+      id: '/new'
+      path: '/new'
+      fullPath: '/new'
+      preLoaderRoute: typeof NewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/security': {
@@ -105,6 +122,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   IntegrationsRoute: IntegrationsRoute,
+  NewRoute: NewRoute,
   SecurityRoute: SecurityRoute,
   SIdRoute: SIdRoute,
 }

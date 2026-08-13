@@ -17,10 +17,12 @@ import { useComposing } from "./composing";
 import type { SendProblem } from "./seal-and-send";
 
 /* The two things the one action says, measured together. Locking… is a third
- * narrower than Create link, and the action sits at the right-hand end of a strip
- * that lays itself out around it, so a plain swap would shrink the button under the
- * cursor that had just pressed it. See SwapLabel. */
-const SENDING = ["Create link", "Locking…"] as const;
+ * narrower than Create link and half the width of Send to #eng-infra, and the
+ * action sits at the right-hand end of a strip that lays itself out around it, so
+ * a plain swap would shrink the button under the cursor that had just pressed it.
+ * See SwapLabel. */
+const CREATE = "Create link";
+const LOCKING = "Locking…";
 
 /*
  * The envelope the sender fills, which is the product's whole above-fold job.
@@ -305,6 +307,7 @@ export function Envelope() {
     note,
     onBlur,
     onFocus,
+    onNoteKey,
     pair,
     removeFile,
     removePair,
@@ -314,10 +317,15 @@ export function Envelope() {
     setNote,
     setPairPassword,
     setUsername,
+    slack,
   } = useComposing();
 
   const layout = atDesk ? "row" : "stacked";
   const density = atDesk ? "default" : "touch";
+
+  /* The action names where it is going, when the sender told us where that is.
+   * The homepage's says Create link, because there they have not. */
+  const primary = slack ? `Send to #${slack.channelName}` : CREATE;
 
   /* A part is unmounted a settle after it is removed, so its slot can close over
    * something. Until then it is still here and shut. */
@@ -336,11 +344,19 @@ export function Envelope() {
           )}
         >
           <DropZone armed={armed}>
+            {/* The caret is already here when the sender arrives from Slack, and
+             * nowhere else. They pressed Enter in a channel a few seconds ago to
+             * open this window, so landing anywhere but the field spends the one
+             * move the whole integration exists to save. On the homepage the same
+             * autofocus would be wrong: a stranger reading it has not begun, and
+             * a phone would answer with a keyboard nobody asked for. */}
             <SecretArea
+              autoFocus={slack !== undefined}
               className="min-h-[132px] px-5 pt-4 pb-3 md:min-h-[158px] md:pt-5 md:pb-2"
               onBlur={onBlur}
               onChange={(event) => setNote(event.target.value)}
               onFocus={onFocus}
+              onKeyDown={onNoteKey}
               placeholder="Paste the secret you need to send"
               rows={noteRows(note)}
               value={note}
@@ -409,8 +425,8 @@ export function Envelope() {
               onClick={send}
             >
               <SwapLabel
-                readings={SENDING}
-                said={locking ? "Locking…" : "Create link"}
+                readings={[primary, LOCKING]}
+                said={locking ? LOCKING : primary}
               />
             </Button>
           }
@@ -442,6 +458,17 @@ export function Envelope() {
           locking && "opacity-50"
         )}
       >
+        {/* The destination, said before the sender commits rather than after. The
+         * second sentence is the reason this window is open at all, so it sits on
+         * the same line of thought as the first. */}
+        {slack ? (
+          <p className="pt-3.5 font-sans text-ink-muted text-small">
+            The finished link posts itself back to{" "}
+            <span className="text-ink">#{slack.channelName}</span>. Nothing you
+            type here goes through Slack.
+          </p>
+        ) : null}
+
         {/* Arrives and leaves with the row it explains, so the click reads as one
          * event rather than a row opening and a paragraph appearing. */}
         <Collapse open={sealOpen}>

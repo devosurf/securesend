@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { useAtDesk } from "../lib/lane";
 import { cn } from "../lib/utils";
-import { Button } from "../ui/button";
+import type { SlackContext } from "../slack/payload";
+import { Button, buttonVariants } from "../ui/button";
 import { Collapse } from "../ui/collapse";
 import { CopyRow } from "../ui/copy-row";
 import { Icon, type IconName } from "../ui/icon";
@@ -78,8 +79,81 @@ function Semantic({ icon, children }: { icon: IconName; children: ReactNode }) {
   );
 }
 
+/** The link itself, in the shape each width can hand it over in. */
+function LinkPanel() {
+  const { copyLink, copied, link } = useComposing();
+  const atDesk = useAtDesk();
+
+  if (!link) {
+    return null;
+  }
+
+  return atDesk ? (
+    <Panel className="mt-8 flex items-center justify-between gap-4 px-4 py-3">
+      <LinkSpecimen className="flex-1" value={link.shown} />
+      <TakeButton
+        className="shrink-0"
+        done={copied}
+        doneLabel="Copied"
+        icon="copy"
+        label="Copy link"
+        onTake={copyLink}
+        size="sm"
+      />
+    </Panel>
+  ) : (
+    <Panel className="mt-6 overflow-hidden">
+      <CopyRow
+        density="touch"
+        label="link"
+        layout="stacked"
+        /* CopyRow shows its tick once this settles, so a browser that refused
+         * the write has to leave it unsettled. Otherwise the row says Copied
+         * over a clipboard that does not have the link in it. */
+        onCopy={async () => {
+          if (!(await copyLink())) {
+            throw new Error("the clipboard refused the link");
+          }
+        }}
+        shape="link"
+        value={link.shown}
+        verbatim
+      />
+    </Panel>
+  );
+}
+
+/* The whole feature's cost, and it only appears when the sender took the option.
+ * Body, not small: this is not a footnote to the link, it is the second half of
+ * the same job. */
+function SealPanel() {
+  const { seal } = useComposing();
+
+  if (!seal) {
+    return null;
+  }
+
+  return (
+    <Panel className="mt-5 bg-surface-sunken px-4 py-4 md:mt-6 md:px-5 md:py-5">
+      <h2 className="font-sans font-semibold text-body text-ink">
+        Send the password separately.
+      </h2>
+      <p className="mt-2 font-sans text-body text-ink-muted md:mt-2.5">
+        A link and its password in one message is one message that opens the
+        secret.
+        <span className="hidden md:inline">
+          {" "}
+          Say it out loud, text it, use a different app. Anything that isn't the
+          message carrying the link.
+        </span>
+        <span className="md:hidden"> Use a different app.</span>
+      </p>
+    </Panel>
+  );
+}
+
 export function Receipt() {
-  const { copyLink, copied, expiry, link, seal, sendAnother } = useComposing();
+  const { expiry, link, seal, sendAnother } = useComposing();
   const atDesk = useAtDesk();
   const { askToBurn, statusOf, trouble } = useWatching();
 
@@ -104,60 +178,8 @@ export function Receipt() {
           : "It has to arrive whole, because the part after the hash is the key."}
       </p>
 
-      {atDesk ? (
-        <Panel className="mt-8 flex items-center justify-between gap-4 px-4 py-3">
-          <LinkSpecimen className="flex-1" value={link.shown} />
-          <TakeButton
-            className="shrink-0"
-            done={copied}
-            doneLabel="Copied"
-            icon="copy"
-            label="Copy link"
-            onTake={copyLink}
-            size="sm"
-          />
-        </Panel>
-      ) : (
-        <Panel className="mt-6 overflow-hidden">
-          <CopyRow
-            density="touch"
-            label="link"
-            layout="stacked"
-            /* CopyRow shows its tick once this settles, so a browser that refused
-             * the write has to leave it unsettled. Otherwise the row says Copied
-             * over a clipboard that does not have the link in it. */
-            onCopy={async () => {
-              if (!(await copyLink())) {
-                throw new Error("the clipboard refused the link");
-              }
-            }}
-            shape="link"
-            value={link.shown}
-            verbatim
-          />
-        </Panel>
-      )}
-
-      {/* The whole feature's cost, and it only appears when the sender took the
-       * option. Body, not small: this is not a footnote to the link, it is the
-       * second half of the same job. */}
-      {seal ? (
-        <Panel className="mt-5 bg-surface-sunken px-4 py-4 md:mt-6 md:px-5 md:py-5">
-          <h2 className="font-sans font-semibold text-body text-ink">
-            Send the password separately.
-          </h2>
-          <p className="mt-2 font-sans text-body text-ink-muted md:mt-2.5">
-            A link and its password in one message is one message that opens the
-            secret.
-            <span className="hidden md:inline">
-              {" "}
-              Say it out loud, text it, use a different app. Anything that isn't
-              the message carrying the link.
-            </span>
-            <span className="md:hidden"> Use a different app.</span>
-          </p>
-        </Panel>
-      ) : null}
+      <LinkPanel />
+      <SealPanel />
     </div>
   );
 
@@ -276,6 +298,106 @@ export function Receipt() {
             a moment.
           </p>
         </Collapse>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The way back into the channel the sender walked out of.
+ *
+ * `slack://channel` focuses the Slack client on this exact conversation. It opens
+ * a client rather than a tab, so like a mailto it does not wear OUTBOUND: a
+ * `target="_blank"` on a scheme the browser hands straight off leaves an empty
+ * window behind on some of them.
+ */
+function slackChannel({ channelId, teamId }: SlackContext): string {
+  return `slack://channel?team=${encodeURIComponent(teamId)}&id=${encodeURIComponent(channelId)}`;
+}
+
+/*
+ * The receipt for a secret that is already in a channel.
+ *
+ * Everything here is in the past tense, and that is the whole design of it: both
+ * messages went up as part of the press, so by the time this paints the channel
+ * has held them for a third of a second. Nothing on this screen is waiting on the
+ * sender, and nothing on it may read as pending.
+ *
+ * No burn and no "this device is watching it". The controls for this secret are
+ * the private message under the post, where the sender is about to be, and two
+ * places to destroy one secret is one place too many. The tab gets an explicit
+ * blessing to close instead, because it cannot close itself and cannot hand focus
+ * back to Slack, and a receipt that leaves that unsaid leaves a window open with a
+ * secret's own link in it.
+ */
+export function PostedReceipt() {
+  const { expiry, seal, slack } = useComposing();
+  const atDesk = useAtDesk();
+
+  if (!slack) {
+    return null;
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-[620px]">
+      <h1 className="font-sans text-heading text-ink-strong">
+        Posted to #{slack.channelName}.
+      </h1>
+      <p className="mt-3 max-w-[480px] text-balance font-sans text-body text-ink-muted md:mt-4">
+        The secret itself never went through Slack. Only the finished link did.
+      </p>
+
+      <LinkPanel />
+      <SealPanel />
+
+      <div className="flex flex-col gap-3 pt-6 md:gap-2.5">
+        {seal ? (
+          <Semantic icon="lock">
+            They'll need the password before it opens.
+          </Semantic>
+        ) : null}
+        <Semantic icon="eye-off">
+          It opens once. After that it's gone, including for you.
+        </Semantic>
+        <Semantic icon="clock">
+          Expires in {spokenExpiry(expiry)} if nobody opens it.
+        </Semantic>
+        {/* The caveat, owed to a sender who has just widened the audience from one
+         * person to a room: the link is the key, and the channel now holds it. */}
+        <Semantic icon="eye">
+          Anyone in #{slack.channelName} can open it. The first one to click
+          gets it.
+        </Semantic>
+      </div>
+
+      <div className="mt-8 border-hairline border-t pt-5 md:mt-9">
+        <p className="pb-5 font-sans text-ink-muted text-small">
+          The controls are already under the post, and only you can see them.
+          Extend it there, or burn it early.
+        </p>
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+          {/* An anchor wearing the button, not a button that navigates: this is a
+           * destination, and the look is shared through buttonVariants precisely
+           * so a destination never has to pretend to be a control. */}
+          <a
+            className={cn(
+              buttonVariants({
+                size: atDesk ? "sm" : "tap",
+                variant: "secondary",
+              }),
+              "gap-2"
+            )}
+            href={slackChannel(slack)}
+          >
+            Open #{slack.channelName} in Slack
+            <Icon name="arrow-right" size={13} />
+          </a>
+
+          <p className="font-sans text-ink-muted text-small">
+            Or close this tab. Nothing here is waiting on you.
+          </p>
+        </div>
       </div>
     </div>
   );

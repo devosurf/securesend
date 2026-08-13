@@ -1,6 +1,7 @@
 import {
   createContext,
   type DragEvent,
+  type KeyboardEvent,
   type ReactNode,
   type RefObject,
   use,
@@ -10,6 +11,8 @@ import {
 } from "react";
 import { WAIT_IF_UNSAID } from "../api/refusal";
 import { useAtDesk } from "../lib/lane";
+import type { SlackContext } from "../slack/payload";
+import { worthPosting } from "../slack/post-back";
 import { SETTLE_MS } from "../ui/collapse";
 import {
   type Draft,
@@ -36,6 +39,10 @@ import {
  * sender dragging a file at the browser is aiming at the window rather than at a
  * rectangle, and what says where it will land is the panel lighting up. The page
  * binds the handlers, the panel reads the state, and both are here.
+ *
+ * A session that began in a Slack channel carries that channel the whole way: it
+ * is what the action says, what Enter does, and where the finished link goes the
+ * moment the press lands. A session with no channel is the homepage's, unchanged.
  *
  * What is not here: the device's history and burning, which belong to the
  * sender's watching side.
@@ -154,8 +161,12 @@ export interface Composing {
   note: string;
   onBlur: () => void;
   onFocus: () => void;
+  /** Enter sends and Shift+Enter is a newline, where creating is also sending. */
+  onNoteKey: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   pair: Pair | null;
   pickFiles: () => void;
+  /** Whether the two messages went to the channel, which decides the receipt. */
+  posted: boolean;
   problem: SendProblem | null;
   removeFile: (id: number) => void;
   removePair: () => void;
@@ -171,6 +182,8 @@ export interface Composing {
   setSealPassword: (value: string) => void;
   setUsername: (value: string) => void;
   shareLink: () => Promise<void>;
+  /** The channel this session came from, and where its link is going. */
+  slack: SlackContext | null;
   stage: Stage;
   /** The phone's introduction is spent once the sender starts. A latch, never a toggle. */
   started: boolean;
@@ -248,7 +261,13 @@ function waitOf(error: unknown): number {
     : WAIT_IF_UNSAID;
 }
 
-export function ComposeProvider({ children }: { children: ReactNode }) {
+export function ComposeProvider({
+  children,
+  slack = null,
+}: {
+  children: ReactNode;
+  slack?: SlackContext | null;
+}) {
   const atDesk = useAtDesk();
 
   const [stage, setStage] = useState<Stage>("compose");
@@ -264,6 +283,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
   const [expiry, setChosen] = useState<Expiry>("24h");
 
   const [link, setLink] = useState<SecretLink | null>(null);
+  const [posted, setPosted] = useState(false);
   const [copied, setCopied] = useState(false);
   const [handoff, setHandoff] = useState<Handoff>("idle");
   const [problem, setProblem] = useState<SendProblem | null>(null);
@@ -385,11 +405,20 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const made = await sealAndSend(draft);
+      /* Asked once, here, because the answer decides both halves of the press: a
+       * handle past its window is not posted to, and the receipt then says what the
+       * homepage's says instead of naming a channel nothing reached. */
+      const toChannel = slack && worthPosting(slack) ? slack : null;
+
+      const made = await sealAndSend(
+        draft,
+        toChannel ? { slack: toChannel } : {}
+      );
       await restOfTheFloor(startedAt);
 
       setCopied(await toClipboard(made.href));
       setLink(made);
+      setPosted(toChannel !== null);
       setStage("sent");
     } catch (error) {
       await restOfTheFloor(startedAt);
@@ -666,10 +695,32 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
       setFocused(true);
       setStarted(true);
     },
+    /*
+     * Enter sends. The sender pressed Enter in Slack half a minute ago to get
+     * here and the muscle is still warm, and here the press has somewhere to go:
+     * creating and posting are one action. On the homepage it does nothing, since
+     * a link that exists is not yet a link that has been sent anywhere.
+     *
+     * At a desk only, and that is not a lane's taste. Shift+Enter is the escape
+     * hatch that makes Enter safe over a field people paste config into, and a
+     * soft keyboard has no Shift, so on a phone the pair would be one rule with
+     * no way out of it.
+     */
+    onNoteKey(event) {
+      if (!(slack && atDesk) || event.key !== "Enter" || event.shiftKey) {
+        return;
+      }
+
+      event.preventDefault();
+      if (canSend && !locking) {
+        send();
+      }
+    },
     pair,
     pickFiles() {
       picker.current?.click();
     },
+    posted,
     problem,
     removeFile(id) {
       edited();
@@ -701,6 +752,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
       setStage("compose");
       setStarted(false);
       setCopied(false);
+      setPosted(false);
       setHandoff("idle");
       setProblem(null);
       setLink(null);
@@ -731,6 +783,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
       setPair((now) => (now ? { ...now, username: value } : now));
     },
     shareLink,
+    slack,
     stage,
     started: started && !atDesk,
   };

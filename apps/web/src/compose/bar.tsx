@@ -52,8 +52,10 @@ export function PhoneBar() {
     locking,
     pair,
     pickFiles,
+    posted,
     send,
     shareLink,
+    slack,
     stage,
   } = useComposing();
   const { askToBurn, statusOf } = useWatching();
@@ -93,8 +95,12 @@ export function PhoneBar() {
           {/* Under the primary, in the same reach, at a tenth of its weight. Burn
            * lands 24px from the bottom edge, the single most pressable place on a
            * phone: weight and width do the separating, and what stands between a
-           * misfire and a destroyed secret is the dialog. */}
-          {link ? (
+           * misfire and a destroyed secret is the dialog.
+           *
+           * Not once the secret has been posted to a channel. Its controls are the
+           * private message sitting under the post, and two places to burn one
+           * secret is one place too many. */}
+          {link && !posted ? (
             <div className="mt-2.5 flex justify-center">
               <Button
                 onClick={() => askToBurn(watchedNow(link))}
@@ -109,6 +115,10 @@ export function PhoneBar() {
       </Collapse>
     );
   }
+
+  /* The action names where it is going, when the sender told us where that is. */
+  const said = slack ? `Send to #${slack.channelName}` : "Create link";
+  const primary = locking ? "Locking…" : said;
 
   return (
     <div className={`${BAND} pt-2.5 pb-6`}>
@@ -152,6 +162,8 @@ export function PhoneBar() {
         </Button>
       </div>
 
+      {/* Full width, so the label can grow into naming a channel without moving
+       * anything: there is nothing beside it to push. */}
       <Button
         busy={locking}
         className="mt-2 w-full"
@@ -159,7 +171,7 @@ export function PhoneBar() {
         onClick={send}
         size="touch"
       >
-        {locking ? "Locking…" : "Create link"}
+        {primary}
       </Button>
 
       {/* The one line from the introduction that is still true while the sender is
