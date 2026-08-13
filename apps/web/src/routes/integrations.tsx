@@ -22,13 +22,13 @@ import { TextLink } from "../ui/text-link";
  *
  * ==== the honesty rules this page is built on =============================
  *
- * One of these exists and two do not. That is stated by the same word in the same
+ * Two of these exist and one does not. That is stated by the same word in the same
  * column in the same face for all three, so the difference is legible in one pass
  * and cannot be talked around by copy. The word is ink weight, never a badge and
  * never a colour: teal means live in this system, and spending it on a status
  * word would make "planned" read as a failure. `available` is full ink and
- * `planned` is faint, and the row that is available is the only one carrying a
- * press, because it is the only one with a page behind it.
+ * `planned` is faint, and the rows that are available are the only ones carrying a
+ * press, because they are the only ones with a page behind them.
  *
  * No dates and no ordering, anywhere. No email capture pretending to be a
  * waitlist. No logos and no third-party marks of any kind. No counts of anybody
@@ -56,8 +56,8 @@ export const Route = createFileRoute("/integrations")({
  */
 type Status = "available" | "planned";
 
-/** The detail page behind a row, and there is one row that has one. */
-type Detail = "/integrations/slack";
+/** The detail page behind a row, for the rows that have one. */
+type Detail = "/integrations/cli" | "/integrations/slack";
 
 interface Integration {
   body: string;
@@ -77,7 +77,8 @@ const INTEGRATIONS: readonly Integration[] = [
   {
     body: "Pipe a file or a password out of a terminal and get a link back. The encrypting happens on your machine, the same way it happens in a tab, so a server you do not control is never in the middle.",
     name: "Command line",
-    status: "planned",
+    page: "/integrations/cli",
+    status: "available",
   },
   {
     body: "Select a secret anywhere on your Mac, right-click, and it becomes a one-time link, in place or on your clipboard. The encrypting happens on your machine, so nothing sits in the middle at all.",
@@ -197,13 +198,12 @@ function Integrations() {
           </Panel>
 
           {/* The two paragraphs that keep `planned` from being a promise. No
-           * dates, no order, and nothing to sign up to: the changelog is the only
+           * date, no order, and nothing to sign up to: the changelog is the only
            * notification this product has, and it is a real one. */}
           <p className="mt-6 max-w-[680px] font-sans text-ink-muted text-small md:mt-7">
-            Neither of those two is a waitlist, and neither has a date. They are
-            the next things we want to build, written down here so you can see
-            what is real today. When one of them ships it turns up on this page
-            and in the{" "}
+            That last one is not a waitlist, and it has no date. It is the next
+            thing we want to build, written down here so you can see what is
+            real today. When it ships it turns up on this page and in the{" "}
             <TextLink href={LINKS.changelog} {...OUTBOUND}>
               changelog
             </TextLink>

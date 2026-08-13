@@ -166,6 +166,17 @@ export const SURFACES: readonly Surface[] = [
     title: "Never paste a password in Slack again",
   },
   {
+    card: CARDS.product,
+    description:
+      "Pipe a secret out, get one link back. cat key.pem | securesend create. The encrypting happens on your machine, the same way it happens in a tab, and only the finished link comes back.",
+    file: "integrations-cli.html",
+    headline: "Pipe a secret out, get one link back.",
+    path: "/integrations/cli",
+    summary:
+      "cat key.pem | securesend create. The encrypting happens on your machine, the same way it happens in a tab, and only the finished link comes back.",
+    title: "Pipe a secret out, get one link back",
+  },
+  {
     card: CARDS.secret,
     description:
       "This can only be opened once. Opening it decrypts it in your browser and wipes the copy on the server.",

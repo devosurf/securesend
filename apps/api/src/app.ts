@@ -153,6 +153,7 @@ if (existsSync(WEB_BUILD)) {
   app.get("/security", served("security.html", HTML));
   app.get("/integrations", served("integrations.html", HTML));
   app.get("/integrations/slack", served("integrations-slack.html", HTML));
+  app.get("/integrations/cli", served("integrations-cli.html", HTML));
 
   /* Both of these name the instance out loud, one in a Sitemap line and one in
    * every entry, so they are filled in on the way out rather than served off the

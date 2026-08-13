@@ -79,6 +79,11 @@ const PAGES = [
      * nav is about where a reader is, and they are inside Integrations. */
     here: "Integrations",
   },
+  {
+    at: "/integrations/cli",
+    file: "integrations-cli.html",
+    here: "Integrations",
+  },
 ] as const;
 
 /** Every document the api serves: the pages meant to be found, and the shell. */
