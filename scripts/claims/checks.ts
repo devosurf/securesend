@@ -468,16 +468,23 @@ const FRAGMENT_ACCESS =
   /location\.hash|\.hash\b|history\.(?:replace|push)State|split\(\s*["'`]#|location\.href/;
 
 /**
- * Where the fragment may be touched, and there are two.
+ * Where the fragment may be touched, and there are three.
  *
  * `reveal` is the one that reads a key, once, and scrubs it from the address bar on
  * the way past. `watch/statuses.ts` is the opposite job and is here for the same
  * reason: it cuts a link at its `#` so the sender's own history can never carry a
  * key into a dialog. A rule that only named `reveal` would have been a rule this
- * repository already broke, so both are named and a third would fail.
+ * repository already broke, so each one is named and a fourth would fail.
+ *
+ * `slack` reads the context a sender carried out of a channel, which rides the
+ * fragment precisely so it never reaches a server log. It is the newest and the
+ * one to watch: it sits in the same folder as the code that posts a finished link
+ * to Slack, so this entry is what keeps that folder honest rather than what
+ * excuses it. Nothing in there may put a key anywhere but the channel message.
  */
 export const FRAGMENT_SITES = [
   "apps/web/src/reveal",
+  "apps/web/src/slack",
   "apps/web/src/watch/statuses.ts",
 ] as const;
 
