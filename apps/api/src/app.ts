@@ -10,6 +10,7 @@ import { burn } from "./secrets/burn";
 import { create } from "./secrets/create";
 import { reveal } from "./secrets/reveal";
 import { status } from "./secrets/status";
+import { command } from "./slack/command";
 
 const WEB_BUILD = "./public";
 const UNAVAILABLE = 503;
@@ -47,7 +48,8 @@ const api = new Hono()
   .route("/secrets", create)
   .route("/secrets", status)
   .route("/secrets", reveal)
-  .route("/secrets", burn);
+  .route("/secrets", burn)
+  .route("/slack", command);
 
 /*
  * The two things every response goes through, in this order.
