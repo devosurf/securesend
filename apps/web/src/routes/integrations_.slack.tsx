@@ -369,10 +369,10 @@ function IntegrationsSlack() {
                       buttonVariants({ variant: "secondary" }),
                       "gap-2"
                     )}
-                    href={LINKS.selfHosting}
+                    href={LINKS.slackApp}
                     {...OUTBOUND}
                   >
-                    Self-hosting docs
+                    Slack setup docs
                     <Icon name="arrow-right" size={13} />
                   </a>
                 </div>
