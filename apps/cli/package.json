@@ -1,6 +1,6 @@
 {
   "name": "securesend",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Share a secret as a one-time link, or consume one someone sent",
   "license": "AGPL-3.0-only",
   "type": "module",
