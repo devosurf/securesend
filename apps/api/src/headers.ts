@@ -17,14 +17,24 @@ import { createMiddleware } from "hono/factory";
  * `object-src`, `base-uri` and `form-action` are none rather than self. The
  * product has no plugins, never rewrites its own base, and posts no forms, so
  * anything using them is not us.
+ *
+ * `connect-src` names one other origin, and it is the only exception in here.
+ * A sender who arrived from Slack has their finished link posted to the channel
+ * by this browser rather than by us, which is the whole reason the key fragment
+ * never reaches our server on that path. That post goes to a one-time reply
+ * handle on hooks.slack.com, so the policy has to allow it. It is an origin we
+ * can only ever send to: nothing is fetched from it, no script or style or font
+ * comes from it, and every other directive stays self.
  */
+const SLACK_HOOKS = "https://hooks.slack.com";
+
 const POLICY = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self'",
   "img-src 'self'",
   "font-src 'self'",
-  "connect-src 'self'",
+  `connect-src 'self' ${SLACK_HOOKS}`,
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",

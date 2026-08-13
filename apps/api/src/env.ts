@@ -70,6 +70,9 @@ const {
   PORT,
   REVEAL_BURST,
   REVEAL_PER_HOUR,
+  SLACK_CLIENT_ID,
+  SLACK_CLIENT_SECRET,
+  SLACK_SIGNING_SECRET,
   STATUS_BURST,
   STATUS_PER_HOUR,
 } = process.env;
@@ -162,6 +165,22 @@ export const env = {
     burst: DEFAULT_REVEAL_BURST,
     perHour: DEFAULT_REVEAL_PER_HOUR,
   }),
+  /**
+   * The Slack app, when an operator has one. All three are absent by default and
+   * the instance runs exactly as before without them: the integration is a door
+   * into the same create surface, not a part of it.
+   *
+   * The signing secret is what proves a request came from Slack, so the two
+   * Slack routes refuse everything while it is unset rather than trusting a
+   * caller. The client pair is only ever used by the install handshake; the
+   * runtime flow itself holds no token, because signed payloads come in and a
+   * one-time reply handle goes out.
+   */
+  slack: {
+    clientId: SLACK_CLIENT_ID,
+    clientSecret: SLACK_CLIENT_SECRET,
+    signingSecret: SLACK_SIGNING_SECRET,
+  },
   statusPace: pace("STATUS", STATUS_PER_HOUR, STATUS_BURST, {
     burst: DEFAULT_STATUS_BURST,
     perHour: DEFAULT_STATUS_PER_HOUR,

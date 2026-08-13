@@ -39,6 +39,22 @@ describe("the security headers bundle", () => {
     expect(policy).not.toContain("unsafe-inline");
     expect(policy).not.toContain("unsafe-eval");
 
+    /* One origin in the whole policy is not us, it is named in exactly one
+     * directive, and that directive can only ever send. A sender who came from
+     * Slack posts their own finished link to a reply handle there, which is why
+     * the key never reaches our server on that path. Pinned rather than merely
+     * contained, because "no third-party anything" is a claim a reader is
+     * invited to check, and the way it stops being true is a second host
+     * arriving here quietly.
+     */
+    const directives = (policy ?? "").split("; ");
+
+    expect(directives).toContain("connect-src 'self' https://hooks.slack.com");
+    expect(
+      directives.filter((directive) => directive.includes("hooks.slack.com"))
+    ).toHaveLength(1);
+    expect(policy).not.toMatch(/https?:\/\/(?!hooks\.slack\.com)/);
+
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
   });
