@@ -24,9 +24,7 @@
       "https://YOUR-INSTANCE.example.com/slack/install/callback"
     ],
     "scopes": {
-      "bot": [
-        "commands"
-      ]
+      "bot": ["commands"]
     }
   },
   "settings": {
