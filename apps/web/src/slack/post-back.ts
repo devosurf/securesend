@@ -167,25 +167,31 @@ function controlsMessage(id: string, managementToken: string, expiry: Expiry) {
  * `fetch` in cors mode with `Content-Type: application/json`, the encoding Slack
  * documents, is refused at the preflight: the handle answers no preflight. What
  * gets through is a CORS simple request, so the message rides as form-encoded
- * `payload=<json>`. A beacon is the one post a closing tab cannot cancel, and this
- * tab is closable the instant the receipt paints, so it goes first; where the
- * browser has none or will not queue one, a no-cors fetch carries it.
+ * `payload=<json>`.
+ *
+ * `fetch` carries it, with `keepalive` so a tab closing on the receipt does not
+ * cancel the post. A beacon has that same property and was tried here first, which
+ * was a mistake worth writing down: `sendBeacon` reports whether the browser
+ * queued the request, not whether it left, so a beacon a privacy setting drops
+ * still answers true and the caller learns nothing. It stays only as the fallback
+ * for a browser that refuses the fetch outright.
  *
  * The answer is opaque either way. This browser cannot know whether Slack took the
- * message, and nothing on the receipt may say it did.
+ * message, only whether it managed to send one.
  */
 function deliver(responseUrl: string, message: object): void {
   const body = new URLSearchParams({ payload: JSON.stringify(message) });
 
-  if (navigator.sendBeacon?.(responseUrl, body)) {
-    return;
-  }
-
-  fetch(responseUrl, { body, method: "POST", mode: "no-cors" }).catch(
-    // Nothing to say and nowhere to say it: the body is the secret's own link, so
-    // an error carrying the request would carry the key into a console.
-    () => undefined
-  );
+  fetch(responseUrl, {
+    body,
+    keepalive: true,
+    method: "POST",
+    mode: "no-cors",
+  }).catch(() => {
+    /* Nothing is logged on the way past. The body is the secret's own link, so an
+     * error carrying the request would carry the key into a console. */
+    navigator.sendBeacon?.(responseUrl, body);
+  });
 }
 
 export function postToChannel(input: {
