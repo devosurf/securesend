@@ -1,6 +1,6 @@
 ---
 name: securesend
-description: Share a secret as a one-time link, or consume one someone sent. Use when a password, API key, token, or credential file needs to move between people or machines; when a command needs a secret that lives behind a securesend link; or when asked to check or destroy a shared secret.
+description: Share a secret as a one-time link, or consume one someone sent. Use when a securesend.dev link, or any /s/ link with a #fragment, appears in the conversation; when a password, API key, token, or credential file needs to move between people or machines; when a command needs a secret held behind such a link; or when asked to check or destroy a shared secret.
 ---
 
 # SecureSend
