@@ -41,7 +41,17 @@ async function overflowOf(page: Page): Promise<number> {
   return await page.evaluate(() => {
     const { documentElement } = document;
 
-    return documentElement.scrollWidth - documentElement.clientWidth;
+    /* Clamped at nothing, because the room `scrollbar-gutter: stable` reserves
+     * comes off the scrollable area without coming off clientWidth. On a platform
+     * that gives a scrollbar room of its own, which every one of these runs on in
+     * CI and none of them do on a phone, a page that fits perfectly measures its
+     * fifteen reserved pixels short. A document narrower than its own viewport is
+     * the thing this file wants; only a document wider than it is a finding, and
+     * one that is wider still reports by how much. */
+    return Math.max(
+      0,
+      documentElement.scrollWidth - documentElement.clientWidth
+    );
   });
 }
 
