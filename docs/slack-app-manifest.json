@@ -2,7 +2,8 @@
   "display_information": {
     "name": "SecureSend",
     "description": "Send a one-time secret link to a channel. The secret is typed in a SecureSend window, never in Slack.",
-    "background_color": "#0a0a0a"
+    "background_color": "#0a0a0a",
+    "long_description": "SecureSend sends a password, an API key or a config file to a channel as a link that opens once and then stops working.\n\nType /ss in any channel. You get a private reply nobody else can see, carrying one button. The button opens a SecureSend tab with the cursor already in the field. Type the secret, press enter, and the finished link is posted back to the channel.\n\nThe bot never sees your secret, and that is structural rather than a promise. There is no field in Slack that takes one: /ss is a door, not a form, and anything typed after it is discarded on arrival and never stored or logged. The secret is encrypted in your own browser before it goes anywhere, and the key that opens it rides the part of a link that browsers never send to a server. Your browser posts the finished link to the channel itself.\n\nOne honest caveat, and it is the whole of the fine print: anyone holding the whole link can open the secret. The link is the key, so post it to the channel you meant.\n\nTwo messages arrive. The channel gets the link and no buttons. You privately get the buttons: stretch the expiry, or burn the secret now.\n\nThe app asks for one permission, commands, so that it can answer /ss. Nothing for posting, nothing for reading your channels, your history or your files.\n\nOpen source under AGPLv3. Run the whole thing yourself in one container, pointed at a Slack app of your own, for nothing."
   },
   "features": {
     "bot_user": {
@@ -23,7 +24,9 @@
       "https://YOUR-INSTANCE.example.com/slack/install/callback"
     ],
     "scopes": {
-      "bot": ["commands"]
+      "bot": [
+        "commands"
+      ]
     }
   },
   "settings": {
