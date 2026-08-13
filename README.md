@@ -56,6 +56,30 @@ no licence key.
 - The sender's own browser remembers what it sent, without an account and without
   ever keeping a key, and can burn a sealed envelope early.
 
+## The CLI
+
+```sh
+npm install -g securesend
+
+cat key.pem | securesend create
+securesend status <link>
+securesend reveal <link>
+securesend run <link> --as DATABASE_URL -- pnpm db:migrate
+```
+
+The same sealing and opening code the browser runs, imported byte for byte from
+[`packages/crypto`](./packages/crypto), on Node's own Web Crypto. `create` prints
+the link on stdout and nothing else there, so it pipes. `run` is the verb for
+agents and scripts: it opens the secret in-process and hands the plaintext to the
+child command as an environment variable, so it never touches stdout, disk, or a
+transcript. If the command fails, the CLI re-seals the secret and prints a fresh
+link rather than letting a failed run destroy it.
+
+It talks to `securesend.dev` unless `SECURESEND_URL` or `--instance` points it at
+your own. The four routes it speaks are public and documented in
+[docs/api.md](./docs/api.md), and `securesend skill` prints a guide written for
+coding agents, the same file as [skills/securesend/SKILL.md](./skills/securesend/SKILL.md).
+
 ## Develop it
 
 You need Node 22 and pnpm. Newer Node works for development; the container and CI
@@ -88,13 +112,16 @@ user-visible change lands with a changeset: `pnpm changeset`. See
 ```
 apps/web         Vite + React SPA
 apps/api         Hono API, serves the web build in production
+apps/cli         the securesend command, published to npm
 packages/crypto  client-side crypto, zero runtime dependencies
+skills/          the agent skill the CLI bundles and prints
 scripts/claims   the claims audit CI runs against the build
 ```
 
 ## Docs
 
 - [docs/self-hosting.md](./docs/self-hosting.md), for running your own.
+- [docs/api.md](./docs/api.md), the four routes everything speaks.
 - [docs/threat-model.md](./docs/threat-model.md), for what this protects against
   and where it stops.
 - [docs/why-agpl.md](./docs/why-agpl.md), for the licence.

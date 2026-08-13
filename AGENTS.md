@@ -41,7 +41,7 @@ compatibility shims.
 
 ## Workspace
 
-pnpm workspace, three packages:
+pnpm workspace, four packages:
 
 - `apps/web`. Vite + React SPA, TanStack Router file-based routes. The generated
   `src/routeTree.gen.ts` is committed. It carries the design system: `src/styles`
@@ -55,6 +55,15 @@ pnpm workspace, three packages:
   document's head, the sitemap and the claims audit.
 - `apps/api`. Hono. Owns the Drizzle schema and the migrations. In production it
   serves the web build from `./public` in the same process.
+- `apps/cli`. The `securesend` command, published to npm under that name. Its
+  whole runtime tree is commander plus our own crypto, which tsup bundles in, so
+  the published package installs with no `@securesend/*` registry lookups. Plain
+  fetch against the four routes in [docs/api.md](./docs/api.md); the wire shapes
+  are held honest by type-only imports of the api's `AppType`, never by runtime
+  Hono. Plaintext may exist in exactly two places: a child process's environment
+  (`run`) and stdout (`reveal`). Never argv, never disk, never an error message.
+  `securesend skill` prints `skills/securesend/SKILL.md`, string-imported at
+  build time so the two cannot drift.
 - `packages/crypto`. Consumed as TypeScript source inside the workspace, since
   both consumers bundle it, and built to `dist/` for the day it publishes. Bytes
   at its API are typed `Uint8Array<ArrayBuffer>`, because Web Crypto refuses a
@@ -67,7 +76,7 @@ Migrations are drizzle-kit generated, never hand-written:
 boot, so there is nothing to run by hand.
 
 Every user-visible change lands with `pnpm changeset`, written as prose about
-what the reader experiences. The three packages share one version.
+what the reader experiences. The four packages share one version.
 
 ## Writing code here
 

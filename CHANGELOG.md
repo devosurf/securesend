@@ -3,8 +3,8 @@
 What changed, written as prose about what you experience rather than as a list of
 commits. One entry per release, newest first.
 
-The three packages in this workspace share one version number, so a release is one
-thing rather than three.
+The packages in this workspace share one version number, so a release is one
+thing rather than several.
 
 ## Unreleased
 

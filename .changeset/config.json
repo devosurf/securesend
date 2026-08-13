@@ -2,7 +2,9 @@
   "$schema": "https://unpkg.com/@changesets/config@3.1.4/schema.json",
   "changelog": "@changesets/cli/changelog",
   "commit": false,
-  "fixed": [["@securesend/api", "@securesend/crypto", "@securesend/web"]],
+  "fixed": [
+    ["@securesend/api", "@securesend/crypto", "@securesend/web", "securesend"]
+  ],
   "linked": [],
   "access": "restricted",
   "baseBranch": "main",

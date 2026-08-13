@@ -1,0 +1,31 @@
+{
+  "name": "securesend",
+  "version": "0.0.0",
+  "description": "Share a secret as a one-time link, or consume one someone sent",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "bin": {
+    "securesend": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "commander": "^15.0.0"
+  },
+  "devDependencies": {
+    "@securesend/api": "workspace:*",
+    "@securesend/crypto": "workspace:*",
+    "@types/node": "^22.20.1",
+    "hono": "^4.12.34",
+    "tsup": "^8.5.1",
+    "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

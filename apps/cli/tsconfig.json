@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+
+    /* The version this binary prints is the one npm installed, so it is read from
+     * the manifest rather than written down a second time. */
+    "resolveJsonModule": true
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["dist"]
+}

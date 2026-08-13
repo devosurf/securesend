@@ -8,6 +8,7 @@ export default defineConfig({
   test: {
     projects: [
       "apps/api",
+      "apps/cli",
       "apps/web",
       {
         test: {
