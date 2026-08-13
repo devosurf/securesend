@@ -26,7 +26,12 @@ import { expect, type Page, test } from "@playwright/test";
 const PHONE = { height: 844, width: 390 };
 
 /** Everything meant to be found, which is everything with a nav on it. */
-const PAGES = ["/", "/security", "/integrations"] as const;
+const PAGES = [
+  "/",
+  "/security",
+  "/integrations",
+  "/integrations/slack",
+] as const;
 
 test.use({ viewport: PHONE });
 

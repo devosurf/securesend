@@ -27,7 +27,7 @@ const API_PORT = 3000;
  * file rather than here because the script that draws the share images reads the
  * same table, and copy that two things quote had better have one home.
  *
- * Four documents come out of that table. Three are the pages meant to be found,
+ * Five documents come out of that table. Four are the pages meant to be found,
  * rendered to markup. The last is the shell every client-rendered route gets:
  * the same assets with an empty root. A secret route must not be served the
  * homepage's markup, both because a flash of "Send a secret" is the wrong thing

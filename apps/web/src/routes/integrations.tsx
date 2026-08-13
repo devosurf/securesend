@@ -1,8 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { LINKS, OUTBOUND } from "../lib/links";
 import { RouteLink } from "../lib/route-link";
 import { cn } from "../lib/utils";
+import { buttonVariants } from "../ui/button";
 import { Icon } from "../ui/icon";
 import { Panel } from "../ui/panel";
 import { SiteNav } from "../ui/site-nav";
@@ -21,12 +22,13 @@ import { TextLink } from "../ui/text-link";
  *
  * ==== the honesty rules this page is built on =============================
  *
- * Everything on this list is planned, and nothing on it exists. That is stated by
- * the same word in the same column in the same face for all three, so the
- * difference is legible in one pass and cannot be talked around by copy. The word
- * is ink weight, never a badge and never a colour: teal means live in this system,
- * and spending it on a status word would make "planned" read as a failure. When
- * one of these ships its word becomes "available" and is set in full ink.
+ * One of these exists and two do not. That is stated by the same word in the same
+ * column in the same face for all three, so the difference is legible in one pass
+ * and cannot be talked around by copy. The word is ink weight, never a badge and
+ * never a colour: teal means live in this system, and spending it on a status
+ * word would make "planned" read as a failure. `available` is full ink and
+ * `planned` is faint, and the row that is available is the only one carrying a
+ * press, because it is the only one with a page behind it.
  *
  * No dates and no ordering, anywhere. No email capture pretending to be a
  * waitlist. No logos and no third-party marks of any kind. No counts of anybody
@@ -54,9 +56,14 @@ export const Route = createFileRoute("/integrations")({
  */
 type Status = "available" | "planned";
 
+/** The detail page behind a row, and there is one row that has one. */
+type Detail = "/integrations/slack";
+
 interface Integration {
   body: string;
   name: string;
+  /** Absent on a row that is planned: there is nothing yet to explain. */
+  page?: Detail;
   status: Status;
 }
 
@@ -64,7 +71,8 @@ const INTEGRATIONS: readonly Integration[] = [
   {
     body: "Type /ss in any channel. You get a private window to type the secret into, and the finished link posts itself back to the channel. The bot never receives what you typed.",
     name: "Slack",
-    status: "planned",
+    page: "/integrations/slack",
+    status: "available",
   },
   {
     body: "Pipe a file or a password out of a terminal and get a link back. The encrypting happens on your machine, the same way it happens in a tab, so a server you do not control is never in the middle.",
@@ -89,34 +97,42 @@ function Item({
   name,
   status,
   first,
+  action,
   children,
 }: {
   name: string;
   status: Status;
   first: boolean;
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div
       className={cn(
-        "px-5 py-5 md:px-6 md:py-6",
+        /* Wrapped on a measure rather than at a breakpoint: the action sits
+         * beside the row where there is room for it and drops under the row where
+         * there is not, which at 390 is every time. */
+        "flex flex-wrap items-start justify-between gap-x-10 gap-y-4 px-5 py-5 md:px-6 md:py-6",
         !first && "border-hairline border-t"
       )}
     >
-      <div className="flex items-baseline gap-3">
-        <h2 className="font-sans font-semibold text-body text-ink">{name}</h2>
-        <span
-          className={cn(
-            "font-mono text-meta lowercase",
-            status === "available" ? "text-ink" : "text-ink-faint"
-          )}
-        >
-          {status}
-        </span>
+      <div className="min-w-[260px] flex-1">
+        <div className="flex items-baseline gap-3">
+          <h2 className="font-sans font-semibold text-body text-ink">{name}</h2>
+          <span
+            className={cn(
+              "font-mono text-meta lowercase",
+              status === "available" ? "text-ink" : "text-ink-faint"
+            )}
+          >
+            {status}
+          </span>
+        </div>
+        <p className="mt-2 max-w-[560px] font-sans text-ink-muted text-small">
+          {children}
+        </p>
       </div>
-      <p className="mt-2 max-w-[560px] font-sans text-ink-muted text-small">
-        {children}
-      </p>
+      {action ? <div className="shrink-0 pt-0.5">{action}</div> : null}
     </div>
   );
 }
@@ -151,6 +167,25 @@ function Integrations() {
           <Panel className="overflow-hidden">
             {INTEGRATIONS.map((integration, at) => (
               <Item
+                action={
+                  integration.page ? (
+                    /* The router's own link rather than RouteLink, which pairs
+                     * the quiet link's look with the right tag. This one wears
+                     * the button's look instead, so it takes the class directly
+                     * rather than fighting the underline off the other one. */
+                    <Link
+                      className={cn(
+                        buttonVariants({ size: "sm", variant: "secondary" }),
+                        "gap-2"
+                      )}
+                      to={integration.page}
+                      viewTransition
+                    >
+                      How it works
+                      <Icon name="arrow-right" size={13} />
+                    </Link>
+                  ) : null
+                }
                 first={at === 0}
                 key={integration.name}
                 name={integration.name}
@@ -165,10 +200,10 @@ function Integrations() {
            * dates, no order, and nothing to sign up to: the changelog is the only
            * notification this product has, and it is a real one. */}
           <p className="mt-6 max-w-[680px] font-sans text-ink-muted text-small md:mt-7">
-            None of these three is a waitlist, and none of them has a date. They
-            are the next things we want to build, written down here so you can
-            see what is real today. When one of them ships it turns up on this
-            page and in the{" "}
+            Neither of those two is a waitlist, and neither has a date. They are
+            the next things we want to build, written down here so you can see
+            what is real today. When one of them ships it turns up on this page
+            and in the{" "}
             <TextLink href={LINKS.changelog} {...OUTBOUND}>
               changelog
             </TextLink>
@@ -176,9 +211,9 @@ function Integrations() {
           </p>
 
           <p className="mt-4 max-w-[680px] font-sans text-ink-muted text-small">
-            Running your own instance? None of these will be gated, and each one
-            will point at whatever server you run, with your own branding. That
-            is the same rule the rest of the product follows.{" "}
+            Running your own instance? Everything here points at whatever server
+            you run. The Slack app is a manifest you paste into your own
+            workspace, with your own branding, and none of it is gated.{" "}
             <TextLink href={LINKS.selfHosting} {...OUTBOUND}>
               Self-hosting docs
             </TextLink>

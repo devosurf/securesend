@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as IntegrationsRouteImport } from './routes/integrations'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as SecurityRouteImport } from './routes/security'
+import { Route as IntegrationsSlackRouteImport } from './routes/integrations_.slack'
 import { Route as SIdRouteImport } from './routes/s.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -35,6 +36,11 @@ const SecurityRoute = SecurityRouteImport.update({
   path: '/security',
   getParentRoute: () => rootRouteImport,
 } as any)
+const IntegrationsSlackRoute = IntegrationsSlackRouteImport.update({
+  id: '/integrations_/slack',
+  path: '/integrations/slack',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SIdRoute = SIdRouteImport.update({
   id: '/s/$id',
   path: '/s/$id',
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/integrations': typeof IntegrationsRoute
   '/new': typeof NewRoute
   '/security': typeof SecurityRoute
+  '/integrations/slack': typeof IntegrationsSlackRoute
   '/s/$id': typeof SIdRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/integrations': typeof IntegrationsRoute
   '/new': typeof NewRoute
   '/security': typeof SecurityRoute
+  '/integrations/slack': typeof IntegrationsSlackRoute
   '/s/$id': typeof SIdRoute
 }
 export interface FileRoutesById {
@@ -61,14 +69,34 @@ export interface FileRoutesById {
   '/integrations': typeof IntegrationsRoute
   '/new': typeof NewRoute
   '/security': typeof SecurityRoute
+  '/integrations_/slack': typeof IntegrationsSlackRoute
   '/s/$id': typeof SIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/integrations' | '/new' | '/security' | '/s/$id'
+  fullPaths:
+    | '/'
+    | '/integrations'
+    | '/new'
+    | '/security'
+    | '/integrations/slack'
+    | '/s/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/integrations' | '/new' | '/security' | '/s/$id'
-  id: '__root__' | '/' | '/integrations' | '/new' | '/security' | '/s/$id'
+  to:
+    | '/'
+    | '/integrations'
+    | '/new'
+    | '/security'
+    | '/integrations/slack'
+    | '/s/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/integrations'
+    | '/new'
+    | '/security'
+    | '/integrations_/slack'
+    | '/s/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -76,6 +104,7 @@ export interface RootRouteChildren {
   IntegrationsRoute: typeof IntegrationsRoute
   NewRoute: typeof NewRoute
   SecurityRoute: typeof SecurityRoute
+  IntegrationsSlackRoute: typeof IntegrationsSlackRoute
   SIdRoute: typeof SIdRoute
 }
 
@@ -109,6 +138,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SecurityRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/integrations_/slack': {
+      id: '/integrations_/slack'
+      path: '/integrations/slack'
+      fullPath: '/integrations/slack'
+      preLoaderRoute: typeof IntegrationsSlackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/s/$id': {
       id: '/s/$id'
       path: '/s/$id'
@@ -124,6 +160,7 @@ const rootRouteChildren: RootRouteChildren = {
   IntegrationsRoute: IntegrationsRoute,
   NewRoute: NewRoute,
   SecurityRoute: SecurityRoute,
+  IntegrationsSlackRoute: IntegrationsSlackRoute,
   SIdRoute: SIdRoute,
 }
 export const routeTree = rootRouteImport

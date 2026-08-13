@@ -72,6 +72,13 @@ const PAGES = [
   { at: "/", file: "index.html", here: null },
   { at: "/security", file: "security.html", here: "Security" },
   { at: "/integrations", file: "integrations.html", here: "Integrations" },
+  {
+    at: "/integrations/slack",
+    file: "integrations-slack.html",
+    /* A detail page under Integrations, so it is that nav item's page too: the
+     * nav is about where a reader is, and they are inside Integrations. */
+    here: "Integrations",
+  },
 ] as const;
 
 /** Every document the api serves: the pages meant to be found, and the shell. */
@@ -265,7 +272,7 @@ describe("what the surfaces claim", () => {
      * it, and it is written by the build rather than by a route, so it is outside every
      * directory the checks above read as source. Both halves of the rule apply to it.
      *
-     * All three documents, the shell included. It is noindex, so its description is
+     * Every document, the shell included. It is noindex, so its description is
      * not there for a search result, but a chat client falls back to reading it. */
     const described = documents.flatMap(({ path, text }) =>
       describedAs(text).map((said) => ({ path, said }))
@@ -293,7 +300,7 @@ describe("what the surfaces claim", () => {
       cardCopy(text).map((copy) => ({ copy, path }))
     );
 
-    /* A headline, a summary and an image description on each of the three. An empty
+    /* A headline, a summary and an image description on each document. An empty
      * list here would mean the head quietly stopped being written, which is how this
      * would break without anybody noticing: a card nobody drew is a link that looks
      * wrong in a chat window, not a build that fails. */

@@ -60,7 +60,7 @@ export interface Card {
 
 /**
  * Two cards, because there are two things a link can be: the product, and one
- * secret somebody was sent. /security and /integrations share the product's
+ * secret somebody was sent. Every page meant to be found shares the product's
  * card. Their own headlines still ride in og:title, so the card is a brand plate
  * under a heading that says which page this is.
  */
@@ -153,6 +153,17 @@ export const SURFACES: readonly Surface[] = [
     summary:
       "What an integration changes is where the errand starts and where the finished link lands.",
     title: "Send a secret from where you already are",
+  },
+  {
+    card: CARDS.product,
+    description:
+      "Never paste a password in Slack again. Type /ss in any channel, your browser locks the secret before it leaves, and only the finished link posts back.",
+    file: "integrations-slack.html",
+    headline: "Never paste a password in Slack again.",
+    path: "/integrations/slack",
+    summary:
+      "Type /ss in any channel, your browser locks the secret before it leaves, and only the finished link posts back.",
+    title: "Never paste a password in Slack again",
   },
   {
     card: CARDS.secret,
