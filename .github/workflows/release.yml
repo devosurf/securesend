@@ -43,12 +43,26 @@ jobs:
       # purpose. It crashes on the first missing file. What it was doing for us
       # is the twenty lines below.
       - id: pending
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           count=$(find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' | wc -l | tr -d ' ')
           echo "count=$count" >> "$GITHUB_OUTPUT"
-          echo "$count changeset(s) waiting"
 
-      - if: steps.pending.outputs.count != '0'
+          # An open release pull request carries the hand-written CHANGELOG
+          # section on its branch, and that section is the one thing the release
+          # cannot cut without. Rebuilding the branch would force-push over it,
+          # so leave it alone entirely. Changesets that arrive while it is open
+          # stay in .changeset and are folded into the release after this one.
+          if gh pr view changeset-release/main --json state --jq .state 2> /dev/null | grep -q OPEN; then
+            echo "open=yes" >> "$GITHUB_OUTPUT"
+            echo "a release pull request is already open, so its branch is left untouched"
+          else
+            echo "open=no" >> "$GITHUB_OUTPUT"
+            echo "$count changeset(s) waiting"
+          fi
+
+      - if: steps.pending.outputs.count != '0' && steps.pending.outputs.open == 'no'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
