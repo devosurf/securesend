@@ -93,19 +93,6 @@ function Step({
   );
 }
 
-/* A key press, in the face this product sets a link and a status word in. Not a
- * drawn key cap, which is furniture: the glyphs are the ones already printed on
- * the hardware. Both of them sit outside the mono subset that ships, so they are
- * drawn by the reader's own system, which on the machine this page is about is
- * where they are drawn correctly anyway. */
-function Keys({ children }: { children: string }) {
-  return (
-    <span className="font-mono text-[14px] text-ink leading-[1.55] tracking-tight">
-      {children}
-    </span>
-  );
-}
-
 /* The security page's two-column fact list, same shapes and the same two icons: a
  * lock for what is handed over and the crossed eye for what is never seen. */
 function Facts({
@@ -310,22 +297,9 @@ function IntegrationsMacos() {
                   From the clipboard
                 </h3>
                 <p className="mt-3 max-w-[420px] font-sans text-ink-muted text-small">
-                  Generate from clipboard is in the menu bar menu, and{" "}
-                  <Keys>⌃⇧C</Keys> does the same thing without the mouse:
-                  whatever you last copied is a link by the time you paste it.
-                  The hotkey is remappable in the app's settings.
-                </p>
-              </div>
-
-              <div className="flex flex-1 flex-col">
-                <h3 className="font-sans font-semibold text-body text-ink">
-                  From a file in Finder
-                </h3>
-                <p className="mt-3 max-w-[420px] font-sans text-ink-muted text-small">
-                  Right-click a file and it goes the same way a selection does,
-                  up to 10 MB, which is the envelope this instance accepts
-                  rather than a limit the app invents. One link, one view, and
-                  the name of the file is sealed with it.
+                  Generate from clipboard is in the menu bar menu: whatever you
+                  last copied is a link by the time you paste it, without
+                  anything on screen having to be selected first.
                 </p>
               </div>
             </div>
