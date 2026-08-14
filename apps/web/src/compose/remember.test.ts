@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type Kept, remember, type SentSecret } from "./remember";
+import { forget, type Kept, remember, type SentSecret } from "./remember";
 
 /*
  * What this browser keeps about what it sent, driven at the only boundary it has:
@@ -108,5 +108,55 @@ describe("remember", () => {
     };
 
     expect(() => remember(sent("fresh", 1), refusing, NOW)).not.toThrow();
+  });
+});
+
+describe("forget", () => {
+  function remembering(...ids: string[]) {
+    const { held, kept } = memory();
+    for (const id of ids) {
+      remember(sent(id, 1), kept, NOW);
+    }
+    return { held, kept };
+  }
+
+  it("drops the named rows and leaves the rest in the order they were in", () => {
+    const { held, kept } = remembering("oldest", "middle", "newest");
+
+    forget(["middle"], kept, NOW);
+
+    expect(idsIn(held)).toStrictEqual(["newest", "oldest"]);
+  });
+
+  /* The token goes with the row, and that is the whole point of forgetting one: what
+   * this browser stops holding is its authority over that secret, not just a line. */
+  it("takes the management token with the row", () => {
+    const { held, kept } = remembering("going", "staying");
+
+    forget(["going"], kept, NOW);
+
+    const rows = JSON.parse(held.get(KEY) ?? "[]") as SentSecret[];
+    expect(rows.map((row) => row.managementToken)).toStrictEqual([
+      "token-staying",
+    ]);
+  });
+
+  it("changes nothing when it is asked for an id this browser never had", () => {
+    const { held, kept } = remembering("kept");
+
+    forget(["never-sent"], kept, NOW);
+
+    expect(idsIn(held)).toStrictEqual(["kept"]);
+  });
+
+  it("says nothing when the browser refuses to write", () => {
+    const refusing: Kept = {
+      getItem: () => JSON.stringify([sent("going", 1)]),
+      setItem: () => {
+        throw new Error("quota exceeded");
+      },
+    };
+
+    expect(() => forget(["going"], refusing, NOW)).not.toThrow();
   });
 });

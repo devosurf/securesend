@@ -120,3 +120,25 @@ export function remember(secret: SentSecret, kept: Kept, now = Date.now()) {
     // and the sender still has it; only the history is lost.
   }
 }
+
+/**
+ * Drops the named ids and leaves the rest in the order they were in.
+ *
+ * This module knows what a browser kept, never what became of it, so it forgets exactly
+ * what it is asked to and guards nothing. The guard that matters is at the only caller:
+ * a sealed row's entry carries the management token that is this browser's one authority
+ * to burn that secret early, so forgetting it leaves the secret alive for the rest of
+ * its expiry with nobody able to end it. Which rows those are is a question only the
+ * watching side can answer, so that is where the refusal lives.
+ */
+export function forget(ids: readonly string[], kept: Kept, now = Date.now()) {
+  const dropping = new Set(ids);
+  const rest = recall(kept, now).filter((held) => !dropping.has(held.id));
+
+  try {
+    kept.setItem(KEY, JSON.stringify(rest));
+  } catch {
+    // Same as above: the store can refuse a write. The rows on screen have gone
+    // either way, and the worst case is that they come back on the next load.
+  }
+}

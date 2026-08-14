@@ -1,7 +1,7 @@
 import { newSecretId } from "@securesend/crypto/ids";
 import { describe, expect, it } from "vitest";
 import type { SentSecret } from "../compose/remember";
-import { burnOne, statusesOf } from "./statuses";
+import { burnOne, isDone, statusesOf, type Watched } from "./statuses";
 
 /*
  * The sender's watching side, driven at its own boundary with a fake instance.
@@ -341,5 +341,30 @@ describe("burnOne", () => {
 
   it("says it did not go through when nothing answers", async () => {
     expect((await burnOne(one(), offline, NOW)).status).toBe("refused");
+  });
+});
+
+/*
+ * The rule the clear on the homepage is built on, pinned on its own because the thing
+ * it protects is invisible on screen.
+ *
+ * Every row looks alike, and one kind of them carries this browser's only authority to
+ * end a secret early. Forgetting a sealed row would leave that secret alive for the rest
+ * of its expiry with nobody able to burn it, so a status quietly moving to the wrong side
+ * of this line is a bug with no symptom until somebody needs the token that went with it.
+ */
+describe("isDone", () => {
+  function row(status: Watched["status"]): Watched {
+    return { id: "an-id", shown: "securesend.dev/s/an-id", status, timing: "" };
+  }
+
+  it("holds a sealed row back, because its token is still worth something", () => {
+    expect(isDone(row("sealed"))).toBe(false);
+  });
+
+  it("lets go of every row nothing can happen to", () => {
+    expect(isDone(row("used"))).toBe(true);
+    expect(isDone(row("burned"))).toBe(true);
+    expect(isDone(row("expired"))).toBe(true);
   });
 });

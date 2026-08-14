@@ -3,15 +3,16 @@ import {
   type ReactNode,
   use,
   useCallback,
+  useEffect,
   useRef,
   useState,
 } from "react";
-import { browserMemory, recall } from "../compose/remember";
+import { browserMemory, forget, recall } from "../compose/remember";
 import { useAtDesk } from "../lib/lane";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { StatusRow } from "../ui/status-row";
-import { burnOne, statusesOf, type Watched } from "./statuses";
+import { burnOne, isDone, statusesOf, type Watched } from "./statuses";
 
 /*
  * What this device is watching, and the one question it asks before destroying
@@ -29,6 +30,17 @@ import { burnOne, statusesOf, type Watched } from "./statuses";
  */
 
 export type Freshness = "load" | "checking" | "fresh";
+
+/*
+ * How long a just-burned row keeps its place among the live ones.
+ *
+ * The list sorts on whether anything can still happen, so a burn changes a row's
+ * position. A row that leaps ten places down the list while it is still crossfading
+ * turns the one moment this product animates carefully into a jump cut, so it stays
+ * where the sender was looking until the tombstone has settled. The number is the row's
+ * own crossfade plus a beat, from status-row.
+ */
+const SETTLE_BURN_MS = 460;
 
 /** Which of the four shapes the homepage's memory element takes. */
 export type Memory = "full" | "forgotten" | "unchecked" | "none";
@@ -51,6 +63,8 @@ export interface Watching {
   askToBurn: (target: Watched) => void;
   /** Why the last re-check brought back no rows, when that is what happened. */
   checkTrouble: CheckTrouble | null;
+  /** This browser forgetting every row nothing can happen to, and only those. */
+  clearDone: () => void;
   confirmBurn: () => Promise<void>;
   freshness: Freshness;
   keep: () => void;
@@ -60,6 +74,8 @@ export interface Watching {
   /** Re-reads this browser's memory and asks about all of it. False if nothing answered. */
   refresh: () => Promise<boolean>;
   rows: Watched[];
+  /** The row burned a moment ago, which keeps its place in the list until it settles. */
+  settling: string | null;
   /** What the instance last said about one id, for a screen watching just one. */
   statusOf: (id: string) => Watched | null;
   /** A burn that did not go through. Nothing was destroyed. */
@@ -124,8 +140,12 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   const [asking, setAsking] = useState<Watched | null>(null);
   const [open, setOpen] = useState(false);
   const [trouble, setTrouble] = useState(false);
+  const [settling, setSettling] = useState<string | null>(null);
 
   const keepIt = useRef<HTMLButtonElement>(null);
+  const settleTimer = useRef(0);
+
+  useEffect(() => () => window.clearTimeout(settleTimer.current), []);
 
   /*
    * Re-reads this browser's memory and asks about all of it. It answers whether the
@@ -209,6 +229,12 @@ export function WatchProvider({ children }: { children: ReactNode }) {
 
     if (burned.status === "answered") {
       record(burned.watched);
+      setSettling(target.id);
+      window.clearTimeout(settleTimer.current);
+      settleTimer.current = window.setTimeout(
+        () => setSettling(null),
+        SETTLE_BURN_MS
+      );
       return;
     }
     if (burned.status === "forgotten") {
@@ -219,6 +245,40 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     setTrouble(true);
   }
 
+  /*
+   * This browser forgetting the rows nothing can happen to, and only those.
+   *
+   * The filter is here rather than at the caller because the difference between the rows
+   * this must never take and the rows it may is invisible on screen. A sealed row's entry
+   * carries the management token that is this browser's only authority to burn it, so
+   * clearing one leaves the secret alive for the rest of its expiry with nobody able to
+   * end it early. That is as irreversible as the burn, and unlike the burn it looks like
+   * tidying up, which is why there is no version of this that takes everything, not even
+   * behind a dialog.
+   *
+   * Nothing is asked before it runs. What it takes are tombstones: the secrets were gone
+   * long before their rows were, and what a sender loses is the ability to match an id
+   * against a message for the few days before the row would have been forgotten anyway.
+   * Spending a confirmation on that is how the confirmation that means a secret is being
+   * destroyed stops being read.
+   */
+  function clearDone() {
+    const going = rows.filter(isDone);
+    if (going.length === 0) {
+      return;
+    }
+
+    const kept = browserMemory();
+    if (kept) {
+      forget(
+        going.map((row) => row.id),
+        kept
+      );
+    }
+
+    setRows((now) => now.filter((row) => !isDone(row)));
+  }
+
   const watching: Watching = {
     asking,
     askToBurn(target) {
@@ -227,6 +287,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       setOpen(true);
     },
     checkTrouble,
+    clearDone,
     confirmBurn,
     freshness,
     keep() {
@@ -236,6 +297,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     recheck,
     refresh,
     rows,
+    settling,
     statusOf(id) {
       return rows.find((row) => row.id === id) ?? null;
     },

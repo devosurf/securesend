@@ -42,6 +42,20 @@ export interface Watched {
   timing: string;
 }
 
+/**
+ * A row nothing can happen to any more, which is the only kind this browser may forget
+ * on a sender's say-so.
+ *
+ * The inverse is the load-bearing half. A sealed row's entry carries the management token
+ * that is this browser's only authority to burn that secret early, so dropping it leaves
+ * the secret alive for the rest of its expiry with nobody able to end it. That is as
+ * irreversible as a burn and it looks like tidying up, so the rule is written once, here,
+ * beside the status it reads.
+ */
+export function isDone(row: Watched): boolean {
+  return row.status !== "sealed";
+}
+
 export type Burned =
   /** The instance answered, and this is what the secret is now. */
   | { status: "answered"; watched: Watched }

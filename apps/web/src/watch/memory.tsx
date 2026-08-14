@@ -8,6 +8,7 @@ import { Icon } from "../ui/icon";
 import { Panel } from "../ui/panel";
 import { StatusRow } from "../ui/status-row";
 import { TextAction } from "../ui/text-link";
+import { isDone, type Watched } from "./statuses";
 import { type CheckTrouble, type Freshness, useWatching } from "./watching";
 
 /*
@@ -85,12 +86,20 @@ function follow(node: HTMLElement | null) {
   requestAnimationFrame(step);
 }
 
-function Rows({ burnable }: { burnable: boolean }) {
-  const { askToBurn, rows } = useWatching();
+function Group({
+  burnable,
+  className,
+  rows,
+}: {
+  burnable: boolean;
+  className: string;
+  rows: Watched[];
+}) {
+  const { askToBurn } = useWatching();
   const atDesk = useAtDesk();
 
   return (
-    <Panel className="mt-3 overflow-hidden">
+    <Panel className={cn("overflow-hidden", className)}>
       {rows.map((row, index) => (
         <StatusRow
           className={cn(index > 0 && "border-hairline border-t")}
@@ -108,6 +117,95 @@ function Rows({ burnable }: { burnable: boolean }) {
         />
       ))}
     </Panel>
+  );
+}
+
+/*
+ * The rows, cut where the live ones stop.
+ *
+ * The order is what decides this element's whole shape. Newest first is the only order a
+ * device-local list can honestly default to, and on a browser that has sent for a week it
+ * puts the two rows a sender can still act on somewhere in the middle of a dozen that are
+ * finished. So the sort key is whether anything can still happen, and age decides inside
+ * each group, which is a rule a sender can state after looking at it once.
+ *
+ * The seam is a gap and a second panel edge, not a heavier rule. A heavier rule is the
+ * obvious answer and on this ground it is invisible: hairline and line-strong are eleven
+ * values apart at one pixel on near-black. Anything legible enough to read as deliberate
+ * would have to be a new value in the tokens, and a token added to draw one line in one
+ * list is a token the system did not need. Two panels say it with what exists, and they
+ * say the truer thing: these are two lists, one of which can still change.
+ *
+ * Neither group is labelled. A label would be the fourth thing here saying what sealed
+ * means, after the teal badge, the countdown and the summary sentence above. All the seam
+ * carries is that the order changed here on purpose.
+ */
+function Rows({ burnable }: { burnable: boolean }) {
+  const { rows, settling } = useWatching();
+
+  /* A row burned a moment ago counts as live until its tombstone has settled, so the
+   * crossfade plays where the sender is looking rather than ten rows further down. */
+  const live = rows.filter((row) => !isDone(row) || row.id === settling);
+  const done = rows.filter((row) => isDone(row) && row.id !== settling);
+
+  if (live.length === 0 || done.length === 0) {
+    return <Group burnable={burnable} className="mt-3" rows={rows} />;
+  }
+
+  return (
+    <>
+      <Group burnable={burnable} className="mt-3" rows={live} />
+      <Group burnable={burnable} className="mt-2" rows={done} />
+    </>
+  );
+}
+
+/*
+ * The sender shortening their own list, and the one control here that throws anything
+ * away without asking first.
+ *
+ * It gets its own line under the freshness one rather than being strung into it.
+ * Re-checking asks the instance what became of these; clearing tells this browser to stop
+ * remembering them. They share a corner of the screen and nothing else, and the one that
+ * discards must not be the second clause of a sentence about something else.
+ *
+ * The whole guard is the sentence on it. It names the exact rows it takes and, by leaving
+ * them out, the exact rows it will not, and the refusal itself is enforced in clearDone
+ * rather than here.
+ *
+ * A TextAction because the lines around it are prose and this is the same voice. On a
+ * phone the trailing sentence takes its own line and the control gets padding, because at
+ * 390 a clause wrapping under a link makes the whole paragraph look pressable, and a line
+ * of small print is not a target a thumb can hit. Same trade as touch density on the rows
+ * above: the type barely moves and the surface grows around it.
+ */
+function ClearDone() {
+  const { clearDone, rows } = useWatching();
+  const atDesk = useAtDesk();
+
+  const count = rows.filter(isDone).length;
+  const aside = "Sealed links stay, so you can still burn them.";
+
+  return (
+    /* enter={false}: it was there when the list loaded and has no arrival to explain. It
+     * does have a leaving, on the same 260ms as the burn affordance above it. Nothing
+     * takes its place, because what is left is the sealed rows, which is the list
+     * working. */
+    <Collapse enter={false} open={count > 0}>
+      <div className={cn(QUIET, atDesk ? "pt-2.5" : "pt-1.5")}>
+        <TextAction
+          className={cn(
+            "text-small",
+            !atDesk && "-mx-1 inline-block px-1 py-2.5"
+          )}
+          onClick={clearDone}
+          tone="quiet"
+        >
+          Clear the {count} that are done
+        </TextAction>
+        {atDesk ? <span className="ml-2">{aside}</span> : <p>{aside}</p>}
+      </div>
+    </Collapse>
   );
 }
 
@@ -284,6 +382,8 @@ export function DeviceMemory() {
           </TextAction>
         )}
       </div>
+
+      <ClearDone />
 
       {/* A re-check that brought nothing back. The rows above are still true, they are
        * just as old as the line already says, so this adds the reason and never takes the
