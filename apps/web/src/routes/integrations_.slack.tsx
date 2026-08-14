@@ -175,7 +175,7 @@ function IntegrationsSlack() {
         className="pointer-events-none absolute inset-0 h-[480px] [background:var(--wash-accent)] md:h-[720px]"
       />
 
-      <SiteNav current="Integrations" />
+      <SiteNav />
 
       <main className="relative px-5 md:px-16">
         <div className="mx-auto max-w-[1000px]">

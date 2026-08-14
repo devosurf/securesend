@@ -75,14 +75,14 @@ const PAGES = [
   {
     at: "/integrations/slack",
     file: "integrations-slack.html",
-    /* A detail page under Integrations, so it is that nav item's page too: the
-     * nav is about where a reader is, and they are inside Integrations. */
-    here: "Integrations",
+    /* A detail page under Integrations, not the index itself, so Integrations
+     * stays a live link here: a reader needs the way back up. */
+    here: null,
   },
   {
     at: "/integrations/cli",
     file: "integrations-cli.html",
-    here: "Integrations",
+    here: null,
   },
 ] as const;
 

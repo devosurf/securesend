@@ -19,6 +19,10 @@ import { Wordmark } from "./wordmark";
  *
  * The current page is a span rather than a link. A nav item that navigates to the
  * page you are standing on is a press that does nothing.
+ *
+ * A detail page under Integrations does not pass `current`: a reader there needs
+ * the way back up, so Integrations stays a live link everywhere except on the
+ * index page itself.
  */
 
 /**
