@@ -7,6 +7,29 @@ The packages in this workspace share one version number, so a release is one
 thing rather than several. Changes that have landed since the last release live
 in [`.changeset/`](./.changeset) until the next one folds them in.
 
+## 1.1.0 (2026-08-14)
+
+### The Mac gets its own page
+
+The integrations list says the macOS app is available, and `/integrations/macos`
+is the page behind it. SecureSend for macOS is a menu bar app: select a secret
+wherever it already is, right-click, and the selection is replaced by a one-time
+link. Where the app you are in will not take a replacement back, and not every
+app does, "Copy as SecureSend link" puts the link on the clipboard instead and
+one paste finishes the job. "Generate from clipboard" in the menu bar does the
+same for something you copied a moment ago.
+
+The page is written around the thing that makes this the strongest of the three
+integrations: the sealing happens on the Mac itself, in CryptoKit, with the same
+AES-256-GCM envelope a browser tab writes. Nothing about the secret passes
+through anybody else on its way to becoming a link. Those links last 24 hours or
+one view, whichever comes first, because a right-click menu has no screen on
+which to choose an expiry, and the page says plainly that anyone holding the
+whole link can open it.
+
+The download comes from the app's own repository, which is public, and every
+release carries the signed and notarized disk image along with its checksum.
+
 ## 1.0.0 (2026-08-13)
 
 The first release: everything the product is, in the order it arrived.
