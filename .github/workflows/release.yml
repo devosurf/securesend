@@ -37,32 +37,50 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      # No publish command here. Tagging and npm both happen in the job below,
-      # after the version PR has merged, so nothing reaches the registry from a
-      # branch that a human has not looked at.
-      - id: changesets
-        uses: changesets/action@v1
-        with:
-          version: pnpm changeset version
-          commit: "release: version the workspace"
-          title: "release: securesend"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Written out rather than delegated to changesets/action, which cannot
+      # express this repository's arrangement: it builds its pull request body by
+      # reading each bumped package's CHANGELOG.md, and there are none here on
+      # purpose. It crashes on the first missing file. What it was doing for us
+      # is the twenty lines below.
+      - id: pending
+        run: |
+          count=$(find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' | wc -l | tr -d ' ')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "$count changeset(s) waiting"
 
-      # The action's title input is static. Name the PR after the version it
-      # proposes, and say in the body what the merge is expected to include,
-      # because with no generated changelog the prose is the reviewer's job.
-      - if: steps.changesets.outputs.pullRequestNumber
+      - if: steps.pending.outputs.count != '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR: ${{ steps.changesets.outputs.pullRequestNumber }}
         run: |
-          version=$(gh api "repos/${{ github.repository }}/contents/apps/cli/package.json?ref=changeset-release/main" --jq .content | base64 -d | jq -r .version)
-          gh pr edit "$PR" --title "release: securesend $version"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Always rebuilt from the branch this ran on, so the release pull
+          # request never carries a stale copy of main alongside the bump.
+          git checkout -B changeset-release/main
+          pnpm changeset version
+          version=$(node -p "require('./apps/cli/package.json').version")
+
+          git add -A
+          git commit -m "release: version the workspace"
+          git push -f origin changeset-release/main
+
           printf '%s\n\n%s\n' \
             "This moves the workspace to $version." \
-            "Before merging, write the \`## $version\` section of \`CHANGELOG.md\` on this branch. It is the only changelog this repository keeps, and the release refuses to cut without it." |
-            gh pr edit "$PR" --body-file -
+            "Before merging, write the \`## $version\` section of \`CHANGELOG.md\` on this branch. It is the only changelog this repository keeps, and the release refuses to cut without it." \
+            > "$RUNNER_TEMP/body.md"
+
+          if gh pr view changeset-release/main --json number > /dev/null 2>&1; then
+            gh pr edit changeset-release/main \
+              --title "release: securesend $version" \
+              --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh pr create \
+              --base main \
+              --head changeset-release/main \
+              --title "release: securesend $version" \
+              --body-file "$RUNNER_TEMP/body.md"
+          fi
 
   # Runs on the merge of a version PR: main is now carrying a version that no
   # tag has. Tags it, cuts the GitHub release from the CHANGELOG, publishes.
