@@ -32,6 +32,7 @@ const PAGES = [
   "/integrations",
   "/integrations/slack",
   "/integrations/cli",
+  "/integrations/macos",
 ] as const;
 
 test.use({ viewport: PHONE });

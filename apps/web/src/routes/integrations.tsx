@@ -15,20 +15,21 @@ import { TextLink } from "../ui/text-link";
  *
  * ==== the constraint, said first ==========================================
  *
- * A secret is typed and locked in a browser tab, and that is not a limitation an
- * integration gets to route around: the tab is the only place the key can exist
- * without us. So an integration moves the beginning and the end of the errand and
- * nothing in between, and the page says that above the list rather than under it.
+ * A secret is locked on the device it was already on, and that is not a limitation
+ * an integration gets to route around: the sending device is the only place the
+ * key can exist without us. So an integration moves the beginning and the end of
+ * the errand and nothing in between, and the page says that above the list rather
+ * than under it.
  *
  * ==== the honesty rules this page is built on =============================
  *
- * Two of these exist and one does not. That is stated by the same word in the same
- * column in the same face for all three, so the difference is legible in one pass
+ * All three of these exist today. That is stated by the same word in the same
+ * column in the same face for every row, so what is true is legible in one pass
  * and cannot be talked around by copy. The word is ink weight, never a badge and
  * never a colour: teal means live in this system, and spending it on a status
- * word would make "planned" read as a failure. `available` is full ink and
- * `planned` is faint, and the rows that are available are the only ones carrying a
- * press, because they are the only ones with a page behind them.
+ * word would make "planned" read as a failure the first time a row arrives
+ * unbuilt. `available` is full ink and `planned` is faint, and a row carries a
+ * press only where there is a page behind it.
  *
  * No dates and no ordering, anywhere. No email capture pretending to be a
  * waitlist. No logos and no third-party marks of any kind. No counts of anybody
@@ -57,7 +58,10 @@ export const Route = createFileRoute("/integrations")({
 type Status = "available" | "planned";
 
 /** The detail page behind a row, for the rows that have one. */
-type Detail = "/integrations/cli" | "/integrations/slack";
+type Detail =
+  | "/integrations/cli"
+  | "/integrations/macos"
+  | "/integrations/slack";
 
 interface Integration {
   body: string;
@@ -83,7 +87,8 @@ const INTEGRATIONS: readonly Integration[] = [
   {
     body: "Select a secret anywhere on your Mac, right-click, and it becomes a one-time link, in place or on your clipboard. The encrypting happens on your machine, so nothing sits in the middle at all.",
     name: "macOS",
-    status: "planned",
+    page: "/integrations/macos",
+    status: "available",
   },
 ];
 
@@ -158,10 +163,10 @@ function Integrations() {
             {/* The constraint, immediately, because it is the thing an
              * integrations page is most tempted to fudge. */}
             <p className="mt-5 max-w-[560px] font-sans text-body text-ink-muted md:mt-7">
-              A secret is still typed and locked in a browser tab, because that
-              is the only place the key can exist without us seeing it. What an
-              integration changes is where the errand starts and where the
-              finished link lands.
+              A secret is still locked on the device it was already on, in a
+              tab, a terminal or a menu bar, because that is the only place the
+              key can exist without us seeing it. What an integration changes is
+              where the errand starts and where the finished link lands.
             </p>
           </header>
 
@@ -197,13 +202,12 @@ function Integrations() {
             ))}
           </Panel>
 
-          {/* The two paragraphs that keep `planned` from being a promise. No
-           * date, no order, and nothing to sign up to: the changelog is the only
-           * notification this product has, and it is a real one. */}
+          {/* The two paragraphs that keep this page from reading as a roadmap.
+           * No date, no order, and nothing to sign up to: the changelog is the
+           * only notification this product has, and it is a real one. */}
           <p className="mt-6 max-w-[680px] font-sans text-ink-muted text-small md:mt-7">
-            That last one is not a waitlist, and it has no date. It is the next
-            thing we want to build, written down here so you can see what is
-            real today. When it ships it turns up on this page and in the{" "}
+            Nothing here is a waitlist. All three are built and you can use them
+            today, and whatever joins them turns up on this page and in the{" "}
             <TextLink href={LINKS.changelog} {...OUTBOUND}>
               changelog
             </TextLink>
@@ -211,9 +215,10 @@ function Integrations() {
           </p>
 
           <p className="mt-4 max-w-[680px] font-sans text-ink-muted text-small">
-            Running your own instance? Everything here points at whatever server
-            you run. The Slack app is a manifest you paste into your own
-            workspace, with your own branding, and none of it is gated.{" "}
+            Running your own instance? The command takes one variable to point
+            at whatever server you run, and the Slack app is a manifest you
+            paste into your own workspace, with your own branding. None of it is
+            gated.{" "}
             <TextLink href={LINKS.selfHosting} {...OUTBOUND}>
               Self-hosting docs
             </TextLink>

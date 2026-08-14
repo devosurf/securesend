@@ -13,6 +13,10 @@
  */
 const REPO = "https://github.com/devosurf/securesend";
 
+/* The Mac app is its own repository: Swift rather than TypeScript, a signed
+ * build rather than a container, and nothing in this workspace imports it. */
+const MACOS = "https://github.com/devosurf/securesend-macos";
+
 export const LINKS = {
   /** Reports about secrets sent through us, which is a different inbox. */
   abuse: "mailto:abuse@securesend.dev",
@@ -20,6 +24,13 @@ export const LINKS = {
   changelog: `${REPO}/blob/main/CHANGELOG.md`,
   /** `packages/crypto`: zero dependencies, and the only part you must trust. */
   crypto: `${REPO}/tree/main/packages/crypto`,
+  /** The Mac app's source, which is what "read it before you install it" means. */
+  macos: MACOS,
+  /**
+   * What a reader installs. The latest release rather than a versioned asset,
+   * because the number changes and this address does not.
+   */
+  macosRelease: `${MACOS}/releases/latest`,
   /** Disclosure. */
   security: "mailto:security@securesend.dev",
   /** One container, one compose file. The self-host story in full. */

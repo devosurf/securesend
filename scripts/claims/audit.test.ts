@@ -84,6 +84,11 @@ const PAGES = [
     file: "integrations-cli.html",
     here: null,
   },
+  {
+    at: "/integrations/macos",
+    file: "integrations-macos.html",
+    here: null,
+  },
 ] as const;
 
 /** Every document the api serves: the pages meant to be found, and the shell. */

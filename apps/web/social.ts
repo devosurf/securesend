@@ -177,6 +177,17 @@ export const SURFACES: readonly Surface[] = [
     title: "Pipe a secret out, get one link back",
   },
   {
+    card: CARDS.product,
+    description:
+      "Right-click a secret and it becomes a link. A menu bar app for macOS: the selection is replaced in place by a one-time link, and the sealing happens on your Mac in CryptoKit.",
+    file: "integrations-macos.html",
+    headline: "Right-click a secret and it becomes a link.",
+    path: "/integrations/macos",
+    summary:
+      "A menu bar app for macOS: the selection is replaced in place by a one-time link, and the sealing happens on your Mac in CryptoKit.",
+    title: "Right-click a secret and it becomes a link",
+  },
+  {
     card: CARDS.secret,
     description:
       "This can only be opened once. Opening it decrypts it in your browser and wipes the copy on the server.",
