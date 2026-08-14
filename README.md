@@ -80,6 +80,10 @@ your own. The four routes it speaks are public and documented in
 [docs/api.md](./docs/api.md), and `securesend skill` prints a guide written for
 coding agents, the same file as [skills/securesend/SKILL.md](./skills/securesend/SKILL.md).
 
+`securesend --version` prints the release it shipped in, the same number this
+repository and the hosted instance carry. `npm update -g securesend` moves you to
+the newest one. Nothing nags you about it.
+
 ## Develop it
 
 You need Node 22 and pnpm. Newer Node works for development; the container and CI

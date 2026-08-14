@@ -140,11 +140,44 @@ Not "add attachment support" but a paragraph or three saying that an envelope ca
 carry files now, what happens when you drag one in, and what the instance can and
 cannot see about it. The existing files in `.changeset/` are the register to match.
 
-The three packages share one version, so pick the bump for the product rather than
+The four packages share one version, so pick the bump for the product rather than
 per package. `minor` for something new a user can do, `patch` for a fix.
 
 A change nobody using the product would notice, a refactor or a test, needs no
 changeset.
+
+## Releases
+
+Merging anything to `main` opens or updates a pull request titled
+`release: securesend X.Y.Z`, which folds every pending changeset into one version
+bump across the workspace. That pull request is the release.
+
+Before merging it, write the `## X.Y.Z` section of [`CHANGELOG.md`](./CHANGELOG.md)
+on its branch. Changesets generates no changelog here, by design: no per-package
+`CHANGELOG.md` files, no bullet lists, just the one prose file. The release refuses
+to cut without that section, so this is not optional.
+
+CI does not run on that pull request, because GitHub does not start workflows for
+a pull request its own token opened. Every other commit in the release was green
+on `main` before it got there, but the version commit itself is one nothing has
+checked, so the release runs `pnpm lint`, `pnpm typecheck` and the CLI build
+before it publishes anything.
+
+A release that tagged and then failed at the registry is fixed by re-running the
+job. It asks git whether the tag exists and npm whether the version is published,
+and does whichever half is missing, so a retry never silently succeeds having
+done nothing.
+
+Merging tags `vX.Y.Z`, cuts the GitHub release with that section as its notes, and
+publishes `securesend` to npm. Nothing is published by hand. The publish proves who
+it is over OIDC against the trusted publisher npm holds for
+`.github/workflows/release.yml`, which is why there is no npm token in this
+repository and why renaming that workflow stops publishing until npm is told the
+new name.
+
+The CLI carries the workspace version, so a release that changed no CLI code still
+publishes an identical `securesend` under a new number. That is the trade for
+`securesend 1.4.0` and a 1.4.0 instance meaning the same release.
 
 ## Style
 

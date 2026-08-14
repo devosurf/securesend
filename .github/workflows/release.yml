@@ -1,0 +1,173 @@
+name: release
+
+# npm's trusted publisher for `securesend` names this file. Rename it and
+# publishing stops working until the package settings on npmjs.com name the new
+# one. There is no npm token in this repository, by design: the publish job
+# proves who it is to the registry per run, over OIDC.
+
+on:
+  push:
+    branches: [main]
+
+# A run may be mid-publish, so queue them instead of cancelling.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # Collects the prose in .changeset/ into a pull request that moves every
+  # package to the next shared number. Merging that PR is the release.
+  version:
+    if: github.repository == 'devosurf/securesend'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # No publish command here. Tagging and npm both happen in the job below,
+      # after the version PR has merged, so nothing reaches the registry from a
+      # branch that a human has not looked at.
+      - id: changesets
+        uses: changesets/action@v1
+        with:
+          version: pnpm changeset version
+          commit: "release: version the workspace"
+          title: "release: securesend"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # The action's title input is static. Name the PR after the version it
+      # proposes, and say in the body what the merge is expected to include,
+      # because with no generated changelog the prose is the reviewer's job.
+      - if: steps.changesets.outputs.pullRequestNumber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.changesets.outputs.pullRequestNumber }}
+        run: |
+          version=$(gh api "repos/${{ github.repository }}/contents/apps/cli/package.json?ref=changeset-release/main" --jq .content | base64 -d | jq -r .version)
+          gh pr edit "$PR" --title "release: securesend $version"
+          printf '%s\n\n%s\n' \
+            "This moves the workspace to $version." \
+            "Before merging, write the \`## $version\` section of \`CHANGELOG.md\` on this branch. It is the only changelog this repository keeps, and the release refuses to cut without it." |
+            gh pr edit "$PR" --body-file -
+
+  # Runs on the merge of a version PR: main is now carrying a version that no
+  # tag has. Tags it, cuts the GitHub release from the CHANGELOG, publishes.
+  publish:
+    if: github.repository == 'devosurf/securesend'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: write # the tag and the GitHub release
+      id-token: write # npm trusted publishing, so no token lives in this repo
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Two questions, asked of the two places that hold the answers, rather than
+      # one proxy standing in for both: a version with no tag still has a release
+      # to cut, and a version the registry has never seen still has a publish to
+      # do. That is what makes a re-run safe. A run that tagged and then failed
+      # at the registry does the half that is missing when it runs again, instead
+      # of seeing its own tag and quietly deciding there is nothing to do.
+      #
+      # It is also why this workflow can sit on every push to main: on an
+      # ordinary commit both answers are no and the job stops here.
+      - id: gate
+        run: |
+          version=$(node -p "require('./apps/cli/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
+            echo "cut=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "cut=true" >> "$GITHUB_OUTPUT"
+          fi
+          if npm view "securesend@$version" version > /dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.gate.outputs.cut == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.gate.outputs.version }}
+        run: |
+          # The release notes are the CHANGELOG section for this version, written
+          # by hand on the version PR. Reading them out first means a missing
+          # section stops the release before a tag exists, so the fix is a commit
+          # to main rather than an untangling.
+          # Matched as text rather than as a pattern. A version is full of dots,
+          # and a dot in a regex matches anything, including the dots awk would
+          # have put back after -v ate the backslashes escaping them.
+          awk -v heading="## $VERSION" '
+            !found && substr($0, 1, length(heading)) == heading &&
+              (substr($0, length(heading) + 1, 1) == "" ||
+               substr($0, length(heading) + 1, 1) == " ") { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "CHANGELOG.md has no '## $VERSION' section. Write it, push to main, and this runs again." >&2
+            exit 1
+          fi
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+          gh release create "v$VERSION" \
+            --title "securesend $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md"
+
+      - if: steps.gate.outputs.publish == 'true'
+        uses: pnpm/action-setup@v6
+      - if: steps.gate.outputs.publish == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - if: steps.gate.outputs.publish == 'true'
+        run: pnpm install --frozen-lockfile
+
+      # The one commit ci.yml never sees is this one: GitHub does not run
+      # workflows for a pull request its own token opened, so the version bump
+      # arrives on main unchecked. These two need no database and no browser, so
+      # the release can afford them, and they cover a hand-cut release as well as
+      # a bot-cut one.
+      - if: steps.gate.outputs.publish == 'true'
+        run: pnpm lint
+      - if: steps.gate.outputs.publish == 'true'
+        run: pnpm typecheck
+
+      # `securesend...` is the CLI and what it is built from. The crypto package
+      # is bundled from source rather than resolved, so there is nothing else to
+      # build for a publish.
+      - if: steps.gate.outputs.publish == 'true'
+        run: pnpm --filter securesend... build
+
+      - if: steps.gate.outputs.publish == 'true'
+        run: |
+          # pnpm packs and npm publishes. pnpm is the one that rewrites the
+          # `workspace:*` specs npm would otherwise publish verbatim, and npm is
+          # the one that speaks OIDC to the registry. Trusted publishing wants
+          # npm 11.5.1 or later; node 22 ships npm 10.
+          npm install -g npm@11
+          pnpm --filter securesend pack --pack-destination "$RUNNER_TEMP"
+          mkdir -p "$RUNNER_TEMP/publish"
+          tar -xzf "$RUNNER_TEMP"/securesend-*.tgz -C "$RUNNER_TEMP/publish"
+          npm publish "$RUNNER_TEMP/publish/package"
