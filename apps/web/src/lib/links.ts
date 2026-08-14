@@ -27,8 +27,15 @@ export const LINKS = {
   /** The Mac app's source, which is what "read it before you install it" means. */
   macos: MACOS,
   /**
-   * What a reader installs. The latest release rather than a versioned asset,
-   * because the number changes and this address does not.
+   * The disk image itself, so pressing Download downloads rather than landing
+   * on a page with an assets list to work out. Every release publishes the same
+   * build twice, once under its version and once under this unchanging name,
+   * which is what lets this address outlive every release.
+   */
+  macosDownload: `${MACOS}/releases/latest/download/SecureSend.dmg`,
+  /**
+   * The release itself, for what a download cannot carry: the notes, and the
+   * sha256 to check the file against.
    */
   macosRelease: `${MACOS}/releases/latest`,
   /** Disclosure. */

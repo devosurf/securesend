@@ -170,10 +170,13 @@ function IntegrationsMacos() {
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-4 md:mt-9">
+              {/* Straight to the disk image, not to a release page to read. No
+               * target: this address answers with a download rather than a
+               * document, so a new tab would open and have nothing to show. */}
               <a
                 className={cn(buttonVariants({ variant: "primary" }), "gap-2")}
-                href={LINKS.macosRelease}
-                {...OUTBOUND}
+                href={LINKS.macosDownload}
+                rel="noreferrer"
               >
                 Download for macOS
                 <Icon name="arrow-right" size={13} />
