@@ -100,8 +100,8 @@ function Value({
   return (
     <span
       className={cn(
-        "block min-w-0",
-        verbatim ? "whitespace-pre-wrap break-all" : "break-words",
+        "block min-w-0 whitespace-pre-wrap",
+        verbatim ? "break-all" : "break-words",
         tone === "mono"
           ? "font-mono text-[14px] text-ink leading-[1.55] tracking-tight"
           : "font-sans text-[15px] text-ink leading-[1.6]",
